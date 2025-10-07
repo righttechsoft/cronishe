@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  cronishe:
+    build: .
+    container_name: cronishe
+    volumes:
+      - ./data:/app/data
+    ports:
+      - "48080:48080"
+    restart: unless-stopped
+    environment:
+      - DB_PATH=/app/data/cronishe.db

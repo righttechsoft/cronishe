@@ -1,0 +1,14 @@
+[project]
+name = "cronishe"
+version = "0.1.0"
+description = "Advanced cron replacement with SQLite database"
+requires-python = ">=3.9"
+dependencies = [
+    "requests>=2.31.0",
+    "bottle>=0.12.25",
+    "tzdata>=2023.3; platform_system == 'Windows'",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
