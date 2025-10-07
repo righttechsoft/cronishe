@@ -2,7 +2,7 @@
 name = "cronishe"
 version = "0.1.0"
 description = "Advanced cron replacement with SQLite database"
-requires-python = ">=3.9"
+requires-python = ">=3.13"
 dependencies = [
     "requests>=2.31.0",
     "bottle>=0.12.25",

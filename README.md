@@ -67,7 +67,7 @@ All timestamps stored as naive UTC for consistency. See `CLAUDE.md` for detailed
 
 ### Technologies
 
-- **Python 3.9+**: Core runtime with zoneinfo for timezone support
+- **Python 3.13+**: Core runtime with zoneinfo for timezone support
 - **SQLite**: Lightweight, embedded database
 - **Bottle**: Minimalist web framework
 - **Threading**: Parallel job execution
@@ -97,7 +97,7 @@ docker-compose down
 ### Option 2: Local Development
 
 **Requirements:**
-- Python 3.9 or higher
+- Python 3.13 or higher
 - uv package manager (or pip)
 
 **Setup:**
@@ -138,16 +138,16 @@ CMD ["sh", "-c", "python /opt/cronishe/scheduler.py & python /opt/cronishe/webui
 #### Method 2: Multi-stage Build
 
 ```dockerfile
-FROM python:3.11-slim as cronishe
+FROM python:3.13-slim as cronishe
 WORKDIR /cronishe
 RUN apt-get update && apt-get install -y git && \
     git clone https://github.com/righttechsoft/cronishe.git . && \
     pip install uv && uv pip install --system -r pyproject.toml
 
-FROM python:3.11-slim
+FROM python:3.13-slim
 # Your existing application setup...
 COPY --from=cronishe /cronishe /opt/cronishe
-COPY --from=cronishe /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+COPY --from=cronishe /usr/local/lib/python3.13/site-packages /usr/local/lib/python3.13/site-packages
 
 # Start both your app and Cronishe
 CMD ["sh", "-c", "python /opt/cronishe/scheduler.py & python /opt/cronishe/webui.py & your-app-command"]
