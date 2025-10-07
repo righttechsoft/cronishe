@@ -119,6 +119,67 @@ python webui.py
 
 **Database location:** `cronishe.db` in current directory (or set `DB_PATH` env var)
 
+### Option 3: Integration with Existing Dockerfile
+
+Replace traditional cron in your existing Docker images with Cronishe.
+
+#### Method 1: Clone from GitHub
+
+```dockerfile
+# Install Cronishe dependencies and clone repo
+RUN apt-get update && apt-get install -y git && \
+    git clone https://github.com/righttechsoft/cronishe.git /opt/cronishe && \
+    pip install -r /opt/cronishe/pyproject.toml
+
+# Start Cronishe alongside your application
+CMD ["sh", "-c", "python /opt/cronishe/scheduler.py & python /opt/cronishe/webui.py & your-app-command"]
+```
+
+#### Method 2: Multi-stage Build
+
+```dockerfile
+FROM python:3.11-slim as cronishe
+WORKDIR /cronishe
+RUN apt-get update && apt-get install -y git && \
+    git clone https://github.com/righttechsoft/cronishe.git . && \
+    pip install uv && uv pip install --system -r pyproject.toml
+
+FROM python:3.11-slim
+# Your existing application setup...
+COPY --from=cronishe /cronishe /opt/cronishe
+COPY --from=cronishe /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
+
+# Start both your app and Cronishe
+CMD ["sh", "-c", "python /opt/cronishe/scheduler.py & python /opt/cronishe/webui.py & your-app-command"]
+```
+
+#### Method 3: Custom Entrypoint
+
+```dockerfile
+# In your existing Dockerfile
+RUN pip install requests bottle tzdata && \
+    cd /opt && git clone https://github.com/righttechsoft/cronishe.git
+
+# Use custom entrypoint to start Cronishe alongside your app
+COPY entrypoint.sh /
+RUN chmod +x /entrypoint.sh
+CMD ["/entrypoint.sh"]
+```
+
+**entrypoint.sh:**
+```bash
+#!/bin/bash
+python /opt/cronishe/scheduler.py &
+python /opt/cronishe/webui.py &
+exec your-original-command
+```
+
+**Important Notes:**
+- Mount a volume for database persistence: `-v ./data:/app/data`
+- Expose port 48080 for web UI: `-p 48080:48080`
+- Set `DB_PATH` environment variable if needed
+- Web UI accessible at `http://localhost:48080` to configure jobs
+
 ## Quick Start Guide
 
 1. **Start Cronishe** (using Docker or local method above)
