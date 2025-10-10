@@ -170,7 +170,7 @@ Replace traditional cron in your existing Docker images with Cronishe.
 # Install Cronishe dependencies and clone repo
 RUN apt-get update && apt-get install -y git && \
     git clone https://github.com/righttechsoft/cronishe.git /opt/cronishe && \
-    pip install -r /opt/cronishe/pyproject.toml
+    pip install uv && uv pip install --system -r /opt/cronishe/pyproject.toml
 
 # Start Cronishe alongside your application
 CMD ["sh", "-c", "python /opt/cronishe/scheduler.py & python /opt/cronishe/webui.py & your-app-command"]
