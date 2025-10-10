@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cronishe - Job Scheduler</title>
+    <title>Cronishe - Multi-Instance Manager</title>
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="/static/favicon-32x32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="/static/favicon-16x16.png">
@@ -22,99 +22,62 @@
             padding: 20px;
         }
 
-        .container {
+        .main-header {
             max-width: 1400px;
-            margin: 0 auto;
-            background: white;
+            margin: 0 auto 30px;
+            background: #2c3e50;
+            color: white;
+            padding: 20px 30px;
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
         }
 
-        .header {
-            background: #2c3e50;
-            color: white;
-            padding: 20px 30px;
-            border-radius: 8px 8px 0 0;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .header h1 {
-            font-size: 24px;
+        .main-header h1 {
+            font-size: 28px;
             font-weight: 600;
-        }
-
-        .header-content {
             display: flex;
             align-items: center;
             gap: 15px;
         }
 
         .logo {
-            height: 40px;
+            height: 45px;
             width: auto;
         }
 
-        .btn {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-            text-decoration: none;
-            display: inline-block;
-            transition: all 0.2s;
-        }
-
-        .btn-primary {
-            background: #3498db;
-            color: white;
-        }
-
-        .btn-primary:hover {
-            background: #2980b9;
-        }
-
-        .btn-success {
-            background: #27ae60;
-            color: white;
-        }
-
-        .btn-success:hover {
-            background: #229954;
-        }
-
-        .btn-warning {
-            background: #f39c12;
-            color: white;
-        }
-
-        .btn-warning:hover {
-            background: #e67e22;
-        }
-
-        .btn-danger {
-            background: #e74c3c;
-            color: white;
-        }
-
-        .btn-danger:hover {
-            background: #c0392b;
-        }
-
-        .btn-secondary {
-            background: #95a5a6;
-            color: white;
-        }
-
-        .btn-secondary:hover {
-            background: #7f8c8d;
-        }
-
-        .btn-sm {
-            padding: 6px 12px;
+        .timezone-info {
             font-size: 12px;
+            color: #ecf0f1;
+            margin-top: 8px;
+        }
+
+        .instance-container {
+            max-width: 1400px;
+            margin: 0 auto 30px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .instance-header {
+            background: #34495e;
+            color: white;
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .instance-header h2 {
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        .instance-url {
+            font-size: 13px;
+            color: #bdc3c7;
+            font-family: 'Courier New', monospace;
         }
 
         .content {
@@ -124,7 +87,6 @@
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 20px;
         }
 
         th {
@@ -174,53 +136,101 @@
             font-weight: 600;
         }
 
-        .actions {
-            display: flex;
-            gap: 5px;
+        .btn {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            text-decoration: none;
+            display: inline-block;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #3498db;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #2980b9;
+        }
+
+        .btn-secondary {
+            background: #95a5a6;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #7f8c8d;
         }
 
         .empty-state {
             text-align: center;
-            padding: 60px 20px;
+            padding: 40px 20px;
             color: #7f8c8d;
         }
 
-        .empty-state h2 {
-            font-size: 20px;
-            margin-bottom: 10px;
+        .empty-state h3 {
+            font-size: 16px;
+            margin-bottom: 8px;
         }
 
-        .empty-state p {
-            font-size: 14px;
-            margin-bottom: 20px;
+        .error-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #e74c3c;
+            background: #fadbd8;
+            border-radius: 4px;
         }
 
-        .timezone-info {
-            font-size: 12px;
+        .error-state h3 {
+            font-size: 16px;
+            margin-bottom: 8px;
+        }
+
+        code {
+            background: #34495e;
             color: #ecf0f1;
-            margin-top: 5px;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-family: 'Courier New', monospace;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <div class="header-content">
+    <div class="main-header">
+        <div>
+            <h1>
                 <img src="/static/logo.png" alt="Cronishe" class="logo">
-                <div>
-                    <h1>Cronishe - Job Scheduler</h1>
-                    <div class="timezone-info">Showing times in: <span id="browser-timezone">Loading...</span></div>
-                </div>
+                Cronishe - Multi-Instance Manager
+            </h1>
+            <div class="timezone-info">Showing times in: <span id="browser-timezone">Loading...</span></div>
+        </div>
+    </div>
+
+    % for instance in instances:
+    <div class="instance-container">
+        <div class="instance-header">
+            <div>
+                <h2>{{instance['name']}}</h2>
+                <div class="instance-url">{{instance['url']}}</div>
             </div>
-            <a href="/job/add" class="btn btn-primary">+ Add Job</a>
+            <a href="{{instance['url']}}" target="_blank" class="btn btn-primary">Open Instance</a>
         </div>
 
         <div class="content">
-            % if len(jobs) == 0:
+            % if instance['error']:
+                <div class="error-state">
+                    <h3>⚠ Unable to connect to instance</h3>
+                    <p>Failed to fetch jobs from <code>{{instance['url']}}</code></p>
+                    <p style="margin-top: 10px; font-size: 13px;">Check that the instance is running and accessible.</p>
+                </div>
+            % elif len(instance['jobs']) == 0:
                 <div class="empty-state">
-                    <h2>No jobs scheduled</h2>
-                    <p>Get started by adding your first job</p>
-                    <a href="/job/add" class="btn btn-primary">+ Add Job</a>
+                    <h3>No jobs scheduled</h3>
+                    <p>This instance has no jobs configured</p>
                 </div>
             % else:
                 <table>
@@ -234,16 +244,14 @@
                             <th style="width: 100px;">Status</th>
                             <th>Last Run</th>
                             <th style="width: 80px;">Result</th>
-                            <th style="width: 90px;">Duration</th>
-                            <th style="width: 280px;">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
-                        % for job in jobs:
+                        % for job in instance['jobs']:
                         <tr>
                             <td>{{job['id']}}</td>
                             <td><strong>{{job['name']}}</strong></td>
-                            <td><code>{{job['path']}}</code></td>
+                            <td><code style="background: #ecf0f1; color: #2c3e50;">{{job['path']}}</code></td>
                             <td>{{job['schedule_text']}}</td>
                             <td>{{job.get('timezone') or 'UTC'}}</td>
                             <td>
@@ -254,8 +262,8 @@
                                 % end
                             </td>
                             <td>
-                                % if job.get('last_run_utc'):
-                                    <span class="utc-time" data-utc="{{job['last_run_utc']}}">{{job['last_run_utc']}}</span>
+                                % if job.get('last_run'):
+                                    <span class="utc-time" data-utc="{{job['last_run']}}">{{job['last_run']}}</span>
                                 % else:
                                     Never
                                 % end
@@ -269,23 +277,6 @@
                                     <span>-</span>
                                 % end
                             </td>
-                            <td>
-                                <code>{{job.get('last_duration', '-')}}</code>
-                            </td>
-                            <td>
-                                <div class="actions">
-                                    <a href="/job/{{job['id']}}/runs" class="btn btn-secondary btn-sm">Runs</a>
-                                    <a href="/job/{{job['id']}}/edit" class="btn btn-primary btn-sm">Edit</a>
-                                    % if job['active']:
-                                        <a href="/job/{{job['id']}}/toggle" class="btn btn-warning btn-sm">Disable</a>
-                                    % else:
-                                        <a href="/job/{{job['id']}}/toggle" class="btn btn-success btn-sm">Enable</a>
-                                    % end
-                                    <form method="POST" action="/job/{{job['id']}}/delete" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this job?');">
-                                        <button type="submit" class="btn btn-danger btn-sm">Delete</button>
-                                    </form>
-                                </div>
-                            </td>
                         </tr>
                         % end
                     </tbody>
@@ -293,6 +284,7 @@
             % end
         </div>
     </div>
+    % end
 
     <script>
         // Get browser timezone

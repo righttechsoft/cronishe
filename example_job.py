@@ -9,11 +9,11 @@ from datetime import datetime
 
 print(f"Job started at {datetime.now()}")
 print("Processing step 1...")
-time.sleep(1)
+time.sleep(60)
 print("Processing step 2...")
-time.sleep(1)
+time.sleep(60)
 print("Processing step 3...")
-time.sleep(1)
+time.sleep(60)
 print(f"Job completed successfully at {datetime.now()}")
 
 sys.exit(0)

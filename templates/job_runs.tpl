@@ -218,7 +218,7 @@
                                     Running
                                 % end
                             </td>
-                            <td>{{run.get('duration', '-')}}</td>
+                            <td><code>{{run.get('duration_formatted', '-')}}</code></td>
                             <td>
                                 % if run['result'] == 'success':
                                     <span class="result-success">Success</span>

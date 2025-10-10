@@ -48,6 +48,9 @@ def execute_job(job: Dict):
 
     logger.info(f"Starting job '{job_name}' (ID: {job_id})")
 
+    # Track start time for duration calculation
+    start_time = datetime.now(timezone.utc)
+
     # Create job run record
     run_id = create_job_run(job_id)
 
@@ -75,14 +78,18 @@ def execute_job(job: Dict):
         # Wait for process to complete
         process.wait()
 
+        # Calculate duration in seconds
+        end_time = datetime.now(timezone.utc)
+        duration = int((end_time - start_time).total_seconds())
+
         # Determine result based on exit code
         result = 'success' if process.returncode == 0 else 'fail'
 
         # Update job run
-        finish_job_run(run_id, result)
+        finish_job_run(run_id, result, duration)
         update_job_last_run(job_id, result)
 
-        logger.info(f"Job '{job_name}' finished with result: {result} (exit code: {process.returncode})")
+        logger.info(f"Job '{job_name}' finished with result: {result} (exit code: {process.returncode}, duration: {duration}s)")
 
         # Call appropriate webhook
         if result == 'success':
@@ -91,9 +98,13 @@ def execute_job(job: Dict):
             call_webhook(job['on_fail'], job_name, 'on_fail')
 
     except Exception as e:
+        # Calculate duration even for failed jobs
+        end_time = datetime.now(timezone.utc)
+        duration = int((end_time - start_time).total_seconds())
+
         logger.error(f"Error executing job '{job_name}': {e}")
         add_log_line(run_id, f"ERROR: {str(e)}")
-        finish_job_run(run_id, 'fail')
+        finish_job_run(run_id, 'fail', duration)
         update_job_last_run(job_id, 'fail')
         call_webhook(job['on_fail'], job_name, 'on_fail')
 

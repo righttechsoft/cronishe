@@ -152,10 +152,26 @@
             background: #7f8c8d;
         }
 
+        .btn-small {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+
         .form-actions {
             display: flex;
             gap: 10px;
             margin-top: 30px;
+        }
+
+        .days-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .days-header label {
+            margin-bottom: 0;
         }
 
         .help-text {
@@ -212,7 +228,10 @@
 
                 <div id="schedule_at" class="schedule-options">
                     <div class="form-group">
-                        <label>Days of Week</label>
+                        <div class="days-header">
+                            <label>Days of Week</label>
+                            <button type="button" class="btn btn-secondary btn-small" onclick="selectAllDays()">Select All Days</button>
+                        </div>
                         <div class="checkbox-group">
                             <div class="checkbox-item">
                                 <input type="checkbox" id="day_mon" name="day_mon" value="1">
@@ -257,8 +276,12 @@
 
                 <div class="form-group">
                     <label for="timezone">Timezone</label>
-                    <input type="text" id="timezone" name="timezone" value="UTC">
-                    <div class="help-text">Examples: <code>UTC</code>, <code>America/New_York</code>, <code>Europe/London</code>, <code>Asia/Tokyo</code></div>
+                    <select id="timezone" name="timezone">
+                        % for tz in timezones:
+                            <option value="{{tz}}" {{'selected' if tz == 'UTC' else ''}}>{{tz}}</option>
+                        % end
+                    </select>
+                    <div class="help-text">Priority zones (UTC, NZ, AU, US) are listed first</div>
                 </div>
 
                 <div class="form-group">
@@ -297,6 +320,13 @@
                 everySection.classList.remove('active');
                 atSection.classList.add('active');
             }
+        }
+
+        function selectAllDays() {
+            const dayCheckboxes = ['day_mon', 'day_tue', 'day_wed', 'day_thu', 'day_fri', 'day_sat', 'day_sun'];
+            dayCheckboxes.forEach(id => {
+                document.getElementById(id).checked = true;
+            });
         }
     </script>
 </body>

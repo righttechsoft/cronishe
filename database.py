@@ -59,6 +59,7 @@ def init_database():
                 timestamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 start_at TIMESTAMP,
                 finish_at TIMESTAMP,
+                duration INTEGER,
                 result TEXT CHECK(result IN ('success', 'fail', NULL)),
                 FOREIGN KEY (job_id) REFERENCES jobs(id)
             )
@@ -105,13 +106,13 @@ def create_job_run(job_id: int) -> int:
         return cursor.lastrowid
 
 
-def finish_job_run(run_id: int, result: str):
-    """Update job run with finish time and result"""
+def finish_job_run(run_id: int, result: str, duration: int):
+    """Update job run with finish time, duration, and result"""
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "UPDATE job_runs SET finish_at = ?, result = ? WHERE id = ?",
-            (datetime.now(timezone.utc).replace(tzinfo=None), result, run_id)
+            "UPDATE job_runs SET finish_at = ?, duration = ?, result = ? WHERE id = ?",
+            (datetime.now(timezone.utc).replace(tzinfo=None), duration, result, run_id)
         )
         conn.commit()
 

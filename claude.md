@@ -26,9 +26,17 @@ Cronishe is a Python-based advanced cron replacement system with SQLite database
    - Job management interface with timezone conversion
    - Run history and log viewer
    - RESTful routes for CRUD operations
+   - JSON API endpoints for multi-instance manager
    - Logo and favicon support
 
-4. **CLI Tool** (`manage_jobs.py`) - Optional
+4. **Multi-Instance Manager** (`manager.py`)
+   - Dashboard for monitoring multiple Cronishe instances
+   - Aggregates jobs from all configured instances
+   - Uses JSON API endpoints from webui.py
+   - Configurable via environment variables
+   - Runs on separate port (default: 48090)
+
+5. **CLI Tool** (`manage_jobs.py`) - Optional
    - Command-line job management
    - Not required for normal operation (use Web UI instead)
 
@@ -76,6 +84,7 @@ Tracks individual job executions.
 | `timestamp` | TIMESTAMP | Record creation time (auto) |
 | `start_at` | TIMESTAMP | Job execution start time |
 | `finish_at` | TIMESTAMP | Job execution finish time |
+| `duration` | INTEGER | Execution duration in seconds |
 | `result` | TEXT | Execution result: `'success'` or `'fail'` |
 
 **Indexes:**
@@ -100,7 +109,8 @@ Stores line-by-line output from job executions.
 cronishe/
 ├── database.py          # Database operations and schema
 ├── scheduler.py         # Main scheduler loop and job execution
-├── webui.py            # Web UI application
+├── webui.py            # Web UI application with API endpoints
+├── manager.py          # Multi-instance manager dashboard
 ├── entrypoint.sh       # Docker entrypoint (runs both scheduler and webui)
 ├── manage_jobs.py      # CLI management tool (optional)
 ├── example_job.py      # Example test job
@@ -110,6 +120,7 @@ cronishe/
 ├── .dockerignore       # Docker build exclusions
 ├── .gitignore          # Git exclusions
 ├── claude.md           # This documentation
+├── README.md           # User documentation
 ├── static/             # Static assets
 │   ├── logo.png        # Application logo
 │   ├── favicon-16x16.png
@@ -121,7 +132,8 @@ cronishe/
     ├── add_job.tpl     # Add job form
     ├── edit_job.tpl    # Edit job form
     ├── job_runs.tpl    # Run history page
-    └── run_logs.tpl    # Log viewer page
+    ├── run_logs.tpl    # Log viewer page
+    └── manager_index.tpl # Manager dashboard page
 ```
 
 ## Core Logic
@@ -174,6 +186,7 @@ cronishe/
 #### Job Execution Process
 
 1. **Pre-execution:**
+   - Track start time for duration calculation
    - Create `job_runs` record with `start_at` timestamp
    - Call `on_start` webhook (if configured)
 
@@ -186,10 +199,12 @@ cronishe/
    - Wait for process completion
 
 3. **Post-execution:**
+   - Calculate execution duration in seconds
    - Capture exit code (0 = success, non-zero = fail)
-   - Update `job_runs` with `finish_at` and `result`
+   - Update `job_runs` with `finish_at`, `duration`, and `result`
    - Update `jobs` with `last_run` and `last_run_result`
    - Call `on_success` or `on_fail` webhook based on result
+   - Log duration in scheduler output
 
 ### Timezone Handling
 
@@ -237,17 +252,28 @@ cronishe/
 
 ### Routes
 
+#### Web UI Routes
+
 | Route | Method | Description |
 |-------|--------|-------------|
-| `/` | GET | List all jobs |
+| `/` | GET | List all jobs with duration info |
 | `/job/add` | GET | Show add job form |
 | `/job/add` | POST | Create new job |
 | `/job/<id>/edit` | GET | Show edit job form |
 | `/job/<id>/edit` | POST | Update job |
 | `/job/<id>/toggle` | GET | Enable/disable job |
 | `/job/<id>/delete` | POST | Delete job |
-| `/job/<id>/runs` | GET | View job run history |
+| `/job/<id>/runs` | GET | View job run history with duration |
 | `/run/<id>/logs` | GET | View run logs |
+| `/static/<filename>` | GET | Serve static assets |
+
+#### JSON API Routes (for manager.py)
+
+| Route | Method | Description |
+|-------|--------|-------------|
+| `/api/jobs` | GET | Return all jobs as JSON |
+| `/api/job/<id>` | GET | Return single job as JSON |
+| `/api/job/<id>/runs` | GET | Return job runs with duration as JSON |
 
 ### Template System
 
@@ -259,9 +285,10 @@ cronishe/
 
 ### UI Features
 
-- **Job List**: Table view with status, schedule, last run
+- **Job List**: Table view with status, schedule, last run, and duration (HH:MM:SS)
 - **Add/Edit Forms**: Dynamic schedule type switching (JavaScript)
-- **Run History**: Chronological list of executions with duration
+- **Run History**: Chronological list of executions with duration in HH:MM:SS format
+- **Duration Display**: Execution time shown in HH:MM:SS format (e.g., 00:02:35)
 - **Log Viewer**: Terminal-style output with timestamps
 - **Responsive Design**: Modern CSS, card-based layout
 - **Color Coding**: Status badges, success/fail indicators
@@ -365,9 +392,61 @@ The Docker container runs both the scheduler and web UI together.
 - Entrypoint: `entrypoint.sh` - starts both scheduler and webui processes
 - Access web UI at: `http://localhost:48080`
 
+## Multi-Instance Manager (`manager.py`)
+
+The manager provides a unified dashboard to monitor multiple Cronishe instances from a single interface.
+
+### Configuration
+
+Configured via environment variables:
+- `CRONISHE_INSTANCES`: Comma-separated list in format `name1:url1,name2:url2`
+- `MANAGER_PORT`: Port for manager web interface (default: `48090`)
+
+### Features
+
+- Aggregates jobs from all configured instances
+- Displays instance name, URL, and job grid for each instance
+- Shows job status, schedule, last run, and result
+- Provides direct links to open individual instances
+- Error handling for unreachable instances
+- Browser timezone conversion for all timestamps
+- Read-only view (no job editing from manager)
+
+### Architecture
+
+- Fetches data from `/api/jobs` endpoint of each instance
+- 5-second timeout per instance request
+- Displays jobs in grid format per instance
+- Continues functioning even if some instances are unreachable
+- Uses `requests` library for HTTP calls
+- Renders via `manager_index.tpl` template
+
+### Use Cases
+
+- Multi-environment monitoring (production, staging, development)
+- Multi-server monitoring (multiple production servers)
+- Multi-tenant monitoring (different client instances)
+
+### Limitations
+
+- Read-only (no job creation/editing)
+- Manual refresh (no auto-refresh)
+- No aggregated statistics
+- No authentication
+- 5-second timeout per instance
+
 ## Environment Variables
 
+### Cronishe Scheduler/WebUI
+
 - `DB_PATH`: SQLite database file path (default: `cronishe.db`)
+
+### Multi-Instance Manager
+
+- `CRONISHE_INSTANCES`: Comma-separated instance list (default: `Local:http://localhost:48080`)
+  - Format: `name1:url1,name2:url2,name3:url3`
+  - Example: `Prod:http://prod:48080,Dev:http://localhost:48080`
+- `MANAGER_PORT`: Manager web interface port (default: `48090`)
 
 ## Security Considerations
 
@@ -419,8 +498,16 @@ The Docker container runs both the scheduler and web UI together.
 ### User Interface
 - **Auto Timezone Conversion**: JavaScript converts all UTC times to browser timezone
 - **Visual Timezone Indicator**: Shows current timezone in page header
+- **Duration Tracking**: Execution time stored in seconds, displayed in HH:MM:SS format
 - **Logo & Branding**: Favicon and logo support on all pages
 - **Real-time Updates**: Dynamic schedule type switching in forms
+
+### Multi-Instance Management
+- **Unified Dashboard**: Monitor multiple Cronishe instances from single interface
+- **Aggregated View**: See jobs from all instances in one place
+- **Flexible Configuration**: Environment variable-based instance configuration
+- **Error Resilience**: Continues functioning even if some instances are unreachable
+- **Instance Links**: Direct links to individual instance interfaces
 
 ## Troubleshooting
 

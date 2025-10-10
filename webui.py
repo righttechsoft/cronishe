@@ -1,7 +1,9 @@
 import os
+import json
 from bottle import Bottle, request, response, template, static_file, redirect, TEMPLATE_PATH
 from datetime import datetime
 from database import init_database, get_db
+from zoneinfo import available_timezones
 
 app = Bottle()
 
@@ -48,6 +50,49 @@ def get_schedule_text(job):
             return f"At {time_str}"
 
 
+def format_duration(seconds):
+    """Format duration in seconds to HH:MM:SS"""
+    if seconds is None:
+        return '-'
+
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+    secs = seconds % 60
+
+    return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+
+
+def get_timezone_list():
+    """Get list of timezones with priority zones first (UTC, NZ, AU, US)"""
+    all_timezones = sorted(available_timezones())
+
+    # Priority timezones
+    priority_zones = []
+
+    # Add UTC first
+    if 'UTC' in all_timezones:
+        priority_zones.append('UTC')
+
+    # Add NZ timezones
+    priority_zones.extend([tz for tz in all_timezones if tz.startswith('Pacific/') and 'Auckland' in tz or 'Chatham' in tz])
+
+    # Add AU timezones
+    priority_zones.extend([tz for tz in all_timezones if tz.startswith('Australia/')])
+
+    # Add US timezones
+    priority_zones.extend([tz for tz in all_timezones if tz.startswith('America/') and any(city in tz for city in ['New_York', 'Chicago', 'Denver', 'Los_Angeles', 'Phoenix', 'Anchorage', 'Honolulu'])])
+    priority_zones.extend([tz for tz in all_timezones if tz.startswith('US/')])
+
+    # Remove duplicates while preserving order
+    seen = set()
+    priority_zones = [tz for tz in priority_zones if tz not in seen and not seen.add(tz)]
+
+    # Get remaining timezones
+    remaining_zones = [tz for tz in all_timezones if tz not in priority_zones]
+
+    return priority_zones + remaining_zones
+
+
 @app.route('/')
 def index():
     """Main page - list all jobs"""
@@ -55,6 +100,17 @@ def index():
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM jobs ORDER BY id")
         jobs = [dict(row) for row in cursor.fetchall()]
+
+        # Get last run duration for each job
+        for job in jobs:
+            cursor.execute("""
+                SELECT duration FROM job_runs
+                WHERE job_id = ?
+                ORDER BY start_at DESC
+                LIMIT 1
+            """, (job['id'],))
+            last_run = cursor.fetchone()
+            job['last_duration'] = format_duration(last_run['duration']) if last_run and last_run['duration'] is not None else '-'
 
     # Enhance job data with formatted schedule
     for job in jobs:
@@ -71,7 +127,8 @@ def index():
 @app.route('/job/add')
 def add_job_form():
     """Show add job form"""
-    return template('add_job')
+    timezones = get_timezone_list()
+    return template('add_job', timezones=timezones)
 
 
 @app.route('/job/add', method='POST')
@@ -131,7 +188,8 @@ def edit_job_form(job_id):
 
         job = dict(job)
 
-    return template('edit_job', job=job)
+    timezones = get_timezone_list()
+    return template('edit_job', job=job, timezones=timezones)
 
 
 @app.route('/job/<job_id:int>/edit', method='POST')
@@ -227,19 +285,11 @@ def job_runs(job_id):
         """, (job_id,))
         runs = [dict(row) for row in cursor.fetchall()]
 
-        # Pass raw timestamps and calculate duration
+        # Pass raw timestamps and format duration
         for run in runs:
             run['start_at_utc'] = run['start_at']
             run['finish_at_utc'] = run['finish_at']
-
-            if run['start_at'] and run['finish_at']:
-                # Calculate duration
-                start = datetime.fromisoformat(run['start_at'])
-                finish = datetime.fromisoformat(run['finish_at'])
-                duration = (finish - start).total_seconds()
-                run['duration'] = f"{duration:.1f}s"
-            else:
-                run['duration'] = '-'
+            run['duration_formatted'] = format_duration(run['duration'])
 
     return template('job_runs', job=job, runs=runs)
 
@@ -284,6 +334,72 @@ def run_logs(run_id):
 def server_static(filename):
     """Serve static files"""
     return static_file(filename, root=os.path.join(os.path.dirname(__file__), 'static'))
+
+
+# JSON API endpoints for multi-instance manager
+@app.route('/api/jobs')
+def api_jobs():
+    """Return all jobs as JSON"""
+    response.content_type = 'application/json'
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM jobs ORDER BY id")
+        jobs = [dict(row) for row in cursor.fetchall()]
+
+    # Enhance job data with formatted schedule
+    for job in jobs:
+        job['schedule_text'] = get_schedule_text(job)
+
+    return json.dumps(jobs)
+
+
+@app.route('/api/job/<job_id:int>')
+def api_job(job_id):
+    """Return single job as JSON"""
+    response.content_type = 'application/json'
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM jobs WHERE id = ?", (job_id,))
+        job = cursor.fetchone()
+        if not job:
+            response.status = 404
+            return json.dumps({'error': 'Job not found'})
+
+        job = dict(job)
+        job['schedule_text'] = get_schedule_text(job)
+
+    return json.dumps(job)
+
+
+@app.route('/api/job/<job_id:int>/runs')
+def api_job_runs(job_id):
+    """Return job runs as JSON"""
+    response.content_type = 'application/json'
+    with get_db() as conn:
+        cursor = conn.cursor()
+
+        # Get job details
+        cursor.execute("SELECT * FROM jobs WHERE id = ?", (job_id,))
+        job = cursor.fetchone()
+        if not job:
+            response.status = 404
+            return json.dumps({'error': 'Job not found'})
+        job = dict(job)
+
+        # Get runs
+        cursor.execute("""
+            SELECT * FROM job_runs
+            WHERE job_id = ?
+            ORDER BY start_at DESC
+            LIMIT 50
+        """, (job_id,))
+        runs = [dict(row) for row in cursor.fetchall()]
+
+        # Format duration
+        for run in runs:
+            run['duration_formatted'] = format_duration(run['duration'])
+
+    return json.dumps({'job': job, 'runs': runs})
 
 
 if __name__ == '__main__':
