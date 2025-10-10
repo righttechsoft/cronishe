@@ -94,6 +94,47 @@ docker-compose down
 
 **Data Persistence:** Jobs and logs are stored in `./data/cronishe.db` (mounted as volume)
 
+**Component Control:**
+
+By default, Docker runs both the scheduler and web UI. You can control which components run using environment variables:
+
+```yaml
+# docker-compose.yml - Run only scheduler
+environment:
+  - RUN_SCHEDULER=true
+  - RUN_WEBUI=false
+  - RUN_MANAGER=false
+```
+
+```yaml
+# docker-compose.yml - Run only web UI (read-only, no job execution)
+environment:
+  - RUN_SCHEDULER=false
+  - RUN_WEBUI=true
+  - RUN_MANAGER=false
+```
+
+```yaml
+# docker-compose.yml - Run all components
+environment:
+  - RUN_SCHEDULER=true
+  - RUN_WEBUI=true
+  - RUN_MANAGER=true
+  - CRONISHE_INSTANCES=Prod:http://prod:48080,Dev:http://dev:48080
+  - MANAGER_PORT=48090
+```
+
+**Available Components:**
+- **Scheduler** (`RUN_SCHEDULER=true`): Job execution engine - runs jobs on schedule
+- **Web UI** (`RUN_WEBUI=true`): Management interface at port 48080
+- **Manager** (`RUN_MANAGER=true`): Multi-instance dashboard at port 48090 (default: false)
+
+**Common Configurations:**
+- **Full instance** (default): `RUN_SCHEDULER=true RUN_WEBUI=true` - Complete Cronishe instance
+- **Scheduler only**: `RUN_SCHEDULER=true RUN_WEBUI=false` - Headless job execution
+- **UI only**: `RUN_SCHEDULER=false RUN_WEBUI=true` - View-only interface (no execution)
+- **Manager only**: `RUN_MANAGER=true RUN_SCHEDULER=false RUN_WEBUI=false` - Monitor multiple instances
+
 ### Option 2: Local Development
 
 **Requirements:**

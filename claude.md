@@ -243,8 +243,11 @@ cronishe/
 ### Parallel Execution
 
 - Each job runs in separate daemon thread
-- Multiple jobs can execute simultaneously
-- No limit on concurrent jobs (system resources permitting)
+- Multiple **different** jobs can execute simultaneously
+- **Overlap Prevention**: A job cannot run if it's already executing (prevents duplicate runs)
+- Check performed before spawning thread: queries `job_runs` for entries with `start_at` but no `finish_at`
+- If job is already running, scheduler logs skip message and waits for next schedule
+- No limit on concurrent **different** jobs (system resources permitting)
 - Thread-safe database operations via connection context managers
 - Threads do not block main scheduler loop
 
@@ -436,6 +439,18 @@ Configured via environment variables:
 - 5-second timeout per instance
 
 ## Environment Variables
+
+### Component Control (entrypoint.sh)
+
+- `RUN_SCHEDULER`: Enable scheduler component (default: `true`)
+- `RUN_WEBUI`: Enable web UI component (default: `true`)
+- `RUN_MANAGER`: Enable manager component (default: `false`)
+
+**Examples:**
+- Run all: `RUN_SCHEDULER=true RUN_WEBUI=true RUN_MANAGER=true`
+- Scheduler only: `RUN_SCHEDULER=true RUN_WEBUI=false RUN_MANAGER=false`
+- WebUI only: `RUN_SCHEDULER=false RUN_WEBUI=true RUN_MANAGER=false`
+- Manager only: `RUN_SCHEDULER=false RUN_WEBUI=false RUN_MANAGER=true`
 
 ### Cronishe Scheduler/WebUI
 
