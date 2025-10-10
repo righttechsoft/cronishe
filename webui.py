@@ -402,6 +402,177 @@ def api_job_runs(job_id):
     return json.dumps({'job': job, 'runs': runs})
 
 
+@app.route('/api/job', method='POST')
+def api_create_job():
+    """Create a new job via API (accepts JSON)"""
+    response.content_type = 'application/json'
+
+    try:
+        data = request.json
+        if not data:
+            response.status = 400
+            return json.dumps({'error': 'No JSON data provided'})
+
+        name = data.get('name')
+        path = data.get('path')
+        frequency_type = data.get('frequency_type')
+        timezone = data.get('timezone') or 'UTC'
+        on_start = data.get('on_start') or None
+        on_success = data.get('on_success') or None
+        on_fail = data.get('on_fail') or None
+
+        if not name or not path or not frequency_type:
+            response.status = 400
+            return json.dumps({'error': 'Missing required fields: name, path, frequency_type'})
+
+        with get_db() as conn:
+            cursor = conn.cursor()
+
+            if frequency_type == 'every':
+                every_min = int(data.get('frequency_every_min', 0))
+                cursor.execute("""
+                    INSERT INTO jobs (name, path, frequency_type, frequency_every_min, timezone, active, on_start, on_success, on_fail)
+                    VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)
+                """, (name, path, 'every', every_min, timezone, on_start, on_success, on_fail))
+            else:  # 'at'
+                mon = 1 if data.get('day_mon') else 0
+                tue = 1 if data.get('day_tue') else 0
+                wed = 1 if data.get('day_wed') else 0
+                thu = 1 if data.get('day_thu') else 0
+                fri = 1 if data.get('day_fri') else 0
+                sat = 1 if data.get('day_sat') else 0
+                sun = 1 if data.get('day_sun') else 0
+                hour = int(data.get('frequency_at_hr', 0))
+                minute = int(data.get('frequency_at_min', 0))
+
+                cursor.execute("""
+                    INSERT INTO jobs (name, path, frequency_type,
+                        frequency_at_mon, frequency_at_tue, frequency_at_wed, frequency_at_thu,
+                        frequency_at_fri, frequency_at_sat, frequency_at_sun,
+                        frequency_at_hr, frequency_at_min, timezone, active, on_start, on_success, on_fail)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+                """, (name, path, 'at', mon, tue, wed, thu, fri, sat, sun, hour, minute, timezone, on_start, on_success, on_fail))
+
+            conn.commit()
+            job_id = cursor.lastrowid
+
+        return json.dumps({'success': True, 'job_id': job_id})
+
+    except Exception as e:
+        response.status = 500
+        return json.dumps({'error': str(e)})
+
+
+@app.route('/api/job/<job_id:int>', method='PUT')
+def api_update_job(job_id):
+    """Update a job via API (accepts JSON)"""
+    response.content_type = 'application/json'
+
+    try:
+        data = request.json
+        if not data:
+            response.status = 400
+            return json.dumps({'error': 'No JSON data provided'})
+
+        name = data.get('name')
+        path = data.get('path')
+        frequency_type = data.get('frequency_type')
+        timezone = data.get('timezone') or 'UTC'
+        on_start = data.get('on_start') or None
+        on_success = data.get('on_success') or None
+        on_fail = data.get('on_fail') or None
+
+        if not name or not path or not frequency_type:
+            response.status = 400
+            return json.dumps({'error': 'Missing required fields: name, path, frequency_type'})
+
+        with get_db() as conn:
+            cursor = conn.cursor()
+
+            if frequency_type == 'every':
+                every_min = int(data.get('frequency_every_min', 0))
+                cursor.execute("""
+                    UPDATE jobs SET name=?, path=?, frequency_type=?, frequency_every_min=?,
+                        frequency_at_mon=NULL, frequency_at_tue=NULL, frequency_at_wed=NULL,
+                        frequency_at_thu=NULL, frequency_at_fri=NULL, frequency_at_sat=NULL,
+                        frequency_at_sun=NULL, frequency_at_hr=NULL, frequency_at_min=NULL,
+                        timezone=?, on_start=?, on_success=?, on_fail=?
+                    WHERE id=?
+                """, (name, path, 'every', every_min, timezone, on_start, on_success, on_fail, job_id))
+            else:  # 'at'
+                mon = 1 if data.get('day_mon') else 0
+                tue = 1 if data.get('day_tue') else 0
+                wed = 1 if data.get('day_wed') else 0
+                thu = 1 if data.get('day_thu') else 0
+                fri = 1 if data.get('day_fri') else 0
+                sat = 1 if data.get('day_sat') else 0
+                sun = 1 if data.get('day_sun') else 0
+                hour = int(data.get('frequency_at_hr', 0))
+                minute = int(data.get('frequency_at_min', 0))
+
+                cursor.execute("""
+                    UPDATE jobs SET name=?, path=?, frequency_type=?,
+                        frequency_every_min=NULL,
+                        frequency_at_mon=?, frequency_at_tue=?, frequency_at_wed=?, frequency_at_thu=?,
+                        frequency_at_fri=?, frequency_at_sat=?, frequency_at_sun=?,
+                        frequency_at_hr=?, frequency_at_min=?, timezone=?, on_start=?, on_success=?, on_fail=?
+                    WHERE id=?
+                """, (name, path, 'at', mon, tue, wed, thu, fri, sat, sun, hour, minute, timezone, on_start, on_success, on_fail, job_id))
+
+            conn.commit()
+
+        return json.dumps({'success': True})
+
+    except Exception as e:
+        response.status = 500
+        return json.dumps({'error': str(e)})
+
+
+@app.route('/api/job/<job_id:int>/toggle', method='POST')
+def api_toggle_job(job_id):
+    """Toggle job active status via API"""
+    response.content_type = 'application/json'
+
+    try:
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute("UPDATE jobs SET active = 1 - active WHERE id = ?", (job_id,))
+            conn.commit()
+
+            # Get updated status
+            cursor.execute("SELECT active FROM jobs WHERE id = ?", (job_id,))
+            job = cursor.fetchone()
+            if not job:
+                response.status = 404
+                return json.dumps({'error': 'Job not found'})
+
+            active = job['active']
+
+        return json.dumps({'success': True, 'active': active})
+
+    except Exception as e:
+        response.status = 500
+        return json.dumps({'error': str(e)})
+
+
+@app.route('/api/job/<job_id:int>', method='DELETE')
+def api_delete_job(job_id):
+    """Delete a job via API"""
+    response.content_type = 'application/json'
+
+    try:
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM jobs WHERE id = ?", (job_id,))
+            conn.commit()
+
+        return json.dumps({'success': True})
+
+    except Exception as e:
+        response.status = 500
+        return json.dumps({'error': str(e)})
+
+
 if __name__ == '__main__':
     # Initialize database
     init_database()

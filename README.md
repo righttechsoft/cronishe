@@ -373,9 +373,19 @@ Monitor different client instances:
 export CRONISHE_INSTANCES="Client-A:http://client-a:48080,Client-B:http://client-b:48080"
 ```
 
+### Manager Capabilities
+
+- **Add Jobs**: Create new jobs on any instance with full schedule configuration
+- **Edit Jobs**: Modify existing job schedules, paths, webhooks, and settings
+- **Enable/Disable Jobs**: Toggle job active status from the manager
+- **Delete Jobs**: Remove jobs from instances with confirmation dialog
+- **Monitor Status**: Real-time job status, schedule, and last run information
+- **Modal Forms**: User-friendly modal interface for all job operations
+- **Schedule Types**: Support for both "every N minutes" and "at specific time" schedules
+- **Timezone Support**: Configure job-specific timezones
+
 ### Manager Limitations
 
-- **Read-only**: Manager is currently view-only (no editing/creating jobs)
 - **Timeout**: 5-second timeout per instance request
 - **No Authentication**: Manager has no built-in authentication
 - **Polling**: Manual refresh required (no auto-refresh yet)
@@ -384,12 +394,12 @@ export CRONISHE_INSTANCES="Client-A:http://client-a:48080,Client-B:http://client
 
 Planned features:
 - Auto-refresh with configurable interval
-- Job creation/editing from manager
 - Aggregated statistics across all instances
 - Real-time notifications for failures
 - Search/filter across all instances
 - Authentication and access control
 - WebSocket support for real-time updates
+- Bulk operations (enable/disable/delete multiple jobs)
 
 ## Quick Start Guide
 

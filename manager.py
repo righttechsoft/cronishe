@@ -1,6 +1,7 @@
 import os
 import requests
-from bottle import Bottle, template, static_file, TEMPLATE_PATH
+import json
+from bottle import Bottle, template, static_file, request, response, TEMPLATE_PATH
 
 app = Bottle()
 
@@ -69,6 +70,119 @@ def index():
         })
 
     return template('manager_index', instances=instances_data)
+
+
+@app.route('/proxy/toggle', method='POST')
+def proxy_toggle():
+    """Proxy toggle job request to target instance"""
+    response.content_type = 'application/json'
+
+    try:
+        data = request.json
+        if not data or 'instance_url' not in data or 'job_id' not in data:
+            response.status = 400
+            return json.dumps({'error': 'Missing instance_url or job_id'})
+
+        instance_url = data['instance_url']
+        job_id = data['job_id']
+
+        # Forward toggle request to instance
+        resp = requests.post(f"{instance_url}/api/job/{job_id}/toggle", timeout=10)
+        resp.raise_for_status()
+
+        return resp.text
+
+    except requests.RequestException as e:
+        response.status = 500
+        return json.dumps({'error': f'Failed to toggle job: {str(e)}'})
+    except Exception as e:
+        response.status = 500
+        return json.dumps({'error': str(e)})
+
+
+@app.route('/proxy/delete', method='POST')
+def proxy_delete():
+    """Proxy delete job request to target instance"""
+    response.content_type = 'application/json'
+
+    try:
+        data = request.json
+        if not data or 'instance_url' not in data or 'job_id' not in data:
+            response.status = 400
+            return json.dumps({'error': 'Missing instance_url or job_id'})
+
+        instance_url = data['instance_url']
+        job_id = data['job_id']
+
+        # Forward delete request to instance
+        resp = requests.delete(f"{instance_url}/api/job/{job_id}", timeout=10)
+        resp.raise_for_status()
+
+        return resp.text
+
+    except requests.RequestException as e:
+        response.status = 500
+        return json.dumps({'error': f'Failed to delete job: {str(e)}'})
+    except Exception as e:
+        response.status = 500
+        return json.dumps({'error': str(e)})
+
+
+@app.route('/proxy/create', method='POST')
+def proxy_create():
+    """Proxy create job request to target instance"""
+    response.content_type = 'application/json'
+
+    try:
+        data = request.json
+        if not data or 'instance_url' not in data or 'job_data' not in data:
+            response.status = 400
+            return json.dumps({'error': 'Missing instance_url or job_data'})
+
+        instance_url = data['instance_url']
+        job_data = data['job_data']
+
+        # Forward create request to instance
+        resp = requests.post(f"{instance_url}/api/job", json=job_data, timeout=10)
+        resp.raise_for_status()
+
+        return resp.text
+
+    except requests.RequestException as e:
+        response.status = 500
+        return json.dumps({'error': f'Failed to create job: {str(e)}'})
+    except Exception as e:
+        response.status = 500
+        return json.dumps({'error': str(e)})
+
+
+@app.route('/proxy/update', method='POST')
+def proxy_update():
+    """Proxy update job request to target instance"""
+    response.content_type = 'application/json'
+
+    try:
+        data = request.json
+        if not data or 'instance_url' not in data or 'job_id' not in data or 'job_data' not in data:
+            response.status = 400
+            return json.dumps({'error': 'Missing instance_url, job_id, or job_data'})
+
+        instance_url = data['instance_url']
+        job_id = data['job_id']
+        job_data = data['job_data']
+
+        # Forward update request to instance
+        resp = requests.put(f"{instance_url}/api/job/{job_id}", json=job_data, timeout=10)
+        resp.raise_for_status()
+
+        return resp.text
+
+    except requests.RequestException as e:
+        response.status = 500
+        return json.dumps({'error': f'Failed to update job: {str(e)}'})
+    except Exception as e:
+        response.status = 500
+        return json.dumps({'error': str(e)})
 
 
 @app.route('/static/<filename>')
