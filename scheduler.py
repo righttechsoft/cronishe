@@ -14,7 +14,8 @@ from database import (
     create_job_run,
     finish_job_run,
     update_job_last_run,
-    add_log_line
+    add_log_line,
+    is_job_running
 )
 
 # Configure logging
@@ -300,6 +301,10 @@ def scheduler_loop():
 
             # Execute each job in a separate thread
             for job in jobs:
+                # Check if job is already running before starting
+                if is_job_running(job['id']):
+                    logger.info(f"Job '{job['name']}' (ID: {job['id']}) is already running, skipping")
+                    continue
                 thread = threading.Thread(target=execute_job, args=(job,))
                 thread.daemon = True
                 thread.start()

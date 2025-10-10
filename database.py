@@ -126,3 +126,15 @@ def update_job_last_run(job_id: int, result: str):
             (datetime.now(timezone.utc).replace(tzinfo=None), result, job_id)
         )
         conn.commit()
+
+
+def is_job_running(job_id: int) -> bool:
+    """Check if a job is currently running (has started but not finished)"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT COUNT(*) FROM job_runs WHERE job_id = ? AND start_at IS NOT NULL AND finish_at IS NULL",
+            (job_id,)
+        )
+        count = cursor.fetchone()[0]
+        return count > 0
