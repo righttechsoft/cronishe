@@ -30,15 +30,28 @@ logger = logging.getLogger(__name__)
 
 
 def call_webhook(url: Optional[str], job_name: str, context: str):
-    """Call a webhook URL if provided"""
+    """Call a webhook URL if provided, with retry logic"""
     if not url:
         return
 
-    try:
-        response = requests.get(url, timeout=10)
-        logger.info(f"Webhook {context} called for job '{job_name}': {url} (status: {response.status_code})")
-    except Exception as e:
-        logger.error(f"Failed to call webhook {context} for job '{job_name}': {e}")
+    max_attempts = 3
+    wait_times = [1, 3, 5]  # Increasing pauses: 1s, 3s, 5s
+
+    for attempt in range(max_attempts):
+        try:
+            response = requests.get(url, timeout=10)
+            response.raise_for_status()  # Raise exception for 4xx/5xx status codes
+            logger.info(f"Webhook {context} called for job '{job_name}': {url} (status: {response.status_code}, attempt: {attempt + 1})")
+            return  # Success, exit function
+        except Exception as e:
+            if attempt < max_attempts - 1:
+                # Not the last attempt, wait and retry
+                wait_time = wait_times[attempt]
+                logger.warning(f"Webhook {context} for job '{job_name}' failed (attempt {attempt + 1}/{max_attempts}): {e}. Retrying in {wait_time}s...")
+                time.sleep(wait_time)
+            else:
+                # Last attempt failed, log error
+                logger.error(f"Webhook {context} for job '{job_name}' failed after {max_attempts} attempts: {e}")
 
 
 def execute_job(job: Dict):

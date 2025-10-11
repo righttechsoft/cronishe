@@ -233,11 +233,18 @@ cronishe/
 
 - HTTP GET requests to configured URLs
 - 10-second timeout per request
+- **Retry Logic**: Up to 3 attempts with exponential backoff
+  - Attempt 1: immediate
+  - Attempt 2: wait 1 second, then retry
+  - Attempt 3: wait 3 seconds, then retry
+  - Total wait time: up to 9 seconds (1s + 3s + 5s)
+  - Retries on: connection errors, timeouts, DNS failures, **and HTTP error status codes (4xx, 5xx)**
 - Three webhook types:
   - `on_start`: Called when job begins execution
   - `on_success`: Called when job exits with code 0
   - `on_fail`: Called when job exits with non-zero code
 - Errors logged but do not affect job execution
+- Detailed logging: attempt number, wait times, and final result
 - Optional: webhooks can be NULL/empty
 
 ### Parallel Execution
@@ -277,6 +284,10 @@ cronishe/
 | `/api/jobs` | GET | Return all jobs as JSON |
 | `/api/job/<id>` | GET | Return single job as JSON |
 | `/api/job/<id>/runs` | GET | Return job runs with duration as JSON |
+| `/api/job` | POST | Create new job (accepts JSON) |
+| `/api/job/<id>` | PUT | Update job (accepts JSON) |
+| `/api/job/<id>/toggle` | POST | Toggle job active status |
+| `/api/job/<id>` | DELETE | Delete job |
 
 ### Template System
 
@@ -407,19 +418,30 @@ Configured via environment variables:
 
 ### Features
 
+- **Full Job Management**: Create, edit, delete, and toggle jobs across all instances
+- **Modal Interface**: User-friendly modal forms for job operations
+- **Schedule Configuration**: Support for both "every N minutes" and "at specific time" schedules
+- **Day Selection**: Configure specific days of week for "at" schedules
+- **Timezone Support**: Per-job timezone configuration with common timezone list
+- **Webhook Configuration**: Set on_start, on_success, and on_fail webhooks
 - Aggregates jobs from all configured instances
 - Displays instance name, URL, and job grid for each instance
 - Shows job status, schedule, last run, and result
 - Provides direct links to open individual instances
 - Error handling for unreachable instances
 - Browser timezone conversion for all timestamps
-- Read-only view (no job editing from manager)
 
 ### Architecture
 
-- Fetches data from `/api/jobs` endpoint of each instance
-- 5-second timeout per instance request
-- Displays jobs in grid format per instance
+- Fetches data from `/api/jobs` endpoint of each instance (GET)
+- Creates jobs via `/api/job` endpoint (POST)
+- Updates jobs via `/api/job/<id>` endpoint (PUT)
+- Toggles jobs via `/api/job/<id>/toggle` endpoint (POST)
+- Deletes jobs via `/api/job/<id>` endpoint (DELETE)
+- Proxy routes in manager.py forward requests to target instances
+- 5-second to 10-second timeout per operation
+- Displays jobs in grid format per instance with action buttons
+- Modal-based forms for create/edit operations
 - Continues functioning even if some instances are unreachable
 - Uses `requests` library for HTTP calls
 - Renders via `manager_index.tpl` template
@@ -432,11 +454,11 @@ Configured via environment variables:
 
 ### Limitations
 
-- Read-only (no job creation/editing)
 - Manual refresh (no auto-refresh)
 - No aggregated statistics
 - No authentication
-- 5-second timeout per instance
+- No bulk operations
+- No real-time updates (WebSockets)
 
 ## Environment Variables
 
@@ -510,6 +532,13 @@ Configured via environment variables:
 - **Browser Timezone Detection**: UI automatically shows times in user's local timezone
 - **Consistent Time Handling**: All time comparisons use naive UTC for reliability
 
+### Webhook Reliability
+- **Automatic Retry**: 3 attempts with exponential backoff (1s, 3s, 5s delays)
+- **Error Handling**: Retries on network errors, timeouts, and HTTP error codes (4xx, 5xx)
+- **Comprehensive Logging**: Detailed attempt tracking and failure reasons
+- **Non-blocking**: Webhook failures don't affect job execution
+- **Timeout Protection**: 10-second timeout per attempt
+
 ### User Interface
 - **Auto Timezone Conversion**: JavaScript converts all UTC times to browser timezone
 - **Visual Timezone Indicator**: Shows current timezone in page header
@@ -518,8 +547,10 @@ Configured via environment variables:
 - **Real-time Updates**: Dynamic schedule type switching in forms
 
 ### Multi-Instance Management
+- **Full Job Management**: Create, edit, delete, and toggle jobs across all instances
 - **Unified Dashboard**: Monitor multiple Cronishe instances from single interface
 - **Aggregated View**: See jobs from all instances in one place
+- **Modal Interface**: User-friendly forms for all job operations
 - **Flexible Configuration**: Environment variable-based instance configuration
 - **Error Resilience**: Continues functioning even if some instances are unreachable
 - **Instance Links**: Direct links to individual instance interfaces
@@ -550,9 +581,15 @@ Configured via environment variables:
 ### Webhook Failures
 
 1. Check URL is accessible from scheduler
-2. Verify 10-second timeout is sufficient
-3. Review scheduler logs for error details
-4. Test webhook endpoint manually
+2. Verify webhook endpoint is responsive (scheduler will retry 3 times on failures)
+3. Review scheduler logs for detailed retry information:
+   - Attempt numbers (1/3, 2/3, 3/3)
+   - Wait times between retries
+   - Specific error messages (connection errors, timeouts, HTTP status codes)
+4. Check if 10-second timeout per attempt is sufficient
+5. Test webhook endpoint manually
+6. Note: Retries occur for network errors AND HTTP error status codes (4xx, 5xx)
+7. Note: Total retry time is up to 39 seconds (3 attempts × 10s timeout + 1s + 3s + 5s waits)
 
 ### Database Locked
 

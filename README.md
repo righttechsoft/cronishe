@@ -30,7 +30,7 @@ Traditional cron has limitations: no centralized logging, no web interface, time
 - **Browser timezone conversion**: All times automatically shown in your local timezone
 
 ### Integration
-- **Webhooks**: HTTP GET requests on job events (start/success/fail)
+- **Webhooks**: HTTP GET requests on job events (start/success/fail) with automatic retry (3 attempts)
 - **Parallel execution**: Multiple jobs run simultaneously
 - **Shell commands**: Execute any command or script
 
@@ -479,8 +479,10 @@ Edit `docker-compose.yml` to customize:
 
 **Webhooks failing?**
 - Check URL is accessible from scheduler
-- 10-second timeout applies to all webhook calls
-- Review scheduler logs for error details
+- Automatic retry: 3 attempts with increasing delays (1s, 3s, 5s)
+- Retries on network errors AND HTTP error codes (4xx, 5xx)
+- 10-second timeout per attempt
+- Review scheduler logs for detailed retry information and error details
 
 ## Documentation
 
