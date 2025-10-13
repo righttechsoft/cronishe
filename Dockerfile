@@ -10,6 +10,7 @@ WORKDIR /app
 COPY pyproject.toml .
 COPY database.py .
 COPY scheduler.py .
+COPY manager.py .
 COPY webui.py .
 COPY templates/ ./templates/
 COPY static/ ./static/
