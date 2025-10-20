@@ -185,6 +185,62 @@ def proxy_update():
         return json.dumps({'error': str(e)})
 
 
+@app.route('/proxy/runs', method='POST')
+def proxy_runs():
+    """Proxy job runs request to target instance"""
+    response.content_type = 'application/json'
+
+    try:
+        data = request.json
+        if not data or 'instance_url' not in data or 'job_id' not in data:
+            response.status = 400
+            return json.dumps({'error': 'Missing instance_url or job_id'})
+
+        instance_url = data['instance_url']
+        job_id = data['job_id']
+
+        # Forward runs request to instance
+        resp = requests.get(f"{instance_url}/api/job/{job_id}/runs", timeout=10)
+        resp.raise_for_status()
+
+        return resp.text
+
+    except requests.RequestException as e:
+        response.status = 500
+        return json.dumps({'error': f'Failed to fetch runs: {str(e)}'})
+    except Exception as e:
+        response.status = 500
+        return json.dumps({'error': str(e)})
+
+
+@app.route('/proxy/logs', method='POST')
+def proxy_logs():
+    """Proxy run logs request to target instance"""
+    response.content_type = 'application/json'
+
+    try:
+        data = request.json
+        if not data or 'instance_url' not in data or 'run_id' not in data:
+            response.status = 400
+            return json.dumps({'error': 'Missing instance_url or run_id'})
+
+        instance_url = data['instance_url']
+        run_id = data['run_id']
+
+        # Forward logs request to instance
+        resp = requests.get(f"{instance_url}/api/run/{run_id}/logs", timeout=10)
+        resp.raise_for_status()
+
+        return resp.text
+
+    except requests.RequestException as e:
+        response.status = 500
+        return json.dumps({'error': f'Failed to fetch logs: {str(e)}'})
+    except Exception as e:
+        response.status = 500
+        return json.dumps({'error': str(e)})
+
+
 @app.route('/static/<filename>')
 def server_static(filename):
     """Serve static files"""

@@ -402,6 +402,37 @@ def api_job_runs(job_id):
     return json.dumps({'job': job, 'runs': runs})
 
 
+@app.route('/api/run/<run_id:int>/logs')
+def api_run_logs(run_id):
+    """Return run logs as JSON"""
+    response.content_type = 'application/json'
+    with get_db() as conn:
+        cursor = conn.cursor()
+
+        # Get run details
+        cursor.execute("""
+            SELECT jr.*, j.name as job_name
+            FROM job_runs jr
+            JOIN jobs j ON jr.job_id = j.id
+            WHERE jr.id = ?
+        """, (run_id,))
+        run = cursor.fetchone()
+        if not run:
+            response.status = 404
+            return json.dumps({'error': 'Run not found'})
+        run = dict(run)
+
+        # Get logs
+        cursor.execute("""
+            SELECT * FROM run_logs
+            WHERE run_id = ?
+            ORDER BY timestamp
+        """, (run_id,))
+        logs = [dict(row) for row in cursor.fetchall()]
+
+    return json.dumps({'run': run, 'logs': logs})
+
+
 @app.route('/api/job', method='POST')
 def api_create_job():
     """Create a new job via API (accepts JSON)"""

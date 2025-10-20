@@ -368,6 +368,47 @@
             font-size: 12px;
             font-family: 'Courier New', monospace;
         }
+
+        /* Large modal for runs and logs */
+        .modal-content-large {
+            width: 900px;
+            max-width: 95%;
+        }
+
+        /* Log styles */
+        .log-container {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            border-radius: 4px;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            max-height: 500px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .log-line {
+            margin-bottom: 2px;
+        }
+
+        .log-timestamp {
+            color: #858585;
+            margin-right: 10px;
+        }
+
+        .btn-sm {
+            padding: 4px 8px;
+            font-size: 11px;
+        }
+
+        .loading-state {
+            text-align: center;
+            padding: 40px 20px;
+            color: #7f8c8d;
+        }
     </style>
 </head>
 <body>
@@ -420,7 +461,7 @@
                             <th style="width: 100px;">Status</th>
                             <th>Last Run</th>
                             <th style="width: 80px;">Result</th>
-                            <th style="width: 240px;">Actions</th>
+                            <th style="width: 300px;">Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -456,6 +497,7 @@
                             </td>
                             <td>
                                 <div class="actions">
+                                    <button class="btn btn-primary" onclick="viewRuns('{{instance['url']}}', {{job['id']}}, '{{job['name']}}')">Runs</button>
                                     <button class="btn btn-edit" onclick='showEditJobModal({{!repr(job)}}, "{{instance['url']}}")'>Edit</button>
                                     <button class="btn btn-toggle" onclick="toggleJob('{{instance['url']}}', {{job['id']}})">
                                         % if job['active']:
@@ -571,6 +613,42 @@
             <div class="modal-footer">
                 <button class="btn btn-secondary" onclick="closeJobModal()">Cancel</button>
                 <button class="btn btn-primary" onclick="saveJob()">Save Job</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Runs Modal -->
+    <div id="runsModal" class="modal">
+        <div class="modal-content modal-content-large">
+            <div class="modal-header">
+                <h2 id="runsModalTitle">Job Runs</h2>
+                <button class="modal-close" onclick="closeRunsModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="runsContent">
+                    <div class="loading-state">Loading runs...</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeRunsModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Logs Modal -->
+    <div id="logsModal" class="modal">
+        <div class="modal-content modal-content-large">
+            <div class="modal-header">
+                <h2 id="logsModalTitle">Run Logs</h2>
+                <button class="modal-close" onclick="closeLogsModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="logsContent">
+                    <div class="loading-state">Loading logs...</div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeLogsModal()">Close</button>
             </div>
         </div>
     </div>
@@ -817,6 +895,247 @@
                 location.reload();
             } catch (error) {
                 alert('Failed to save job: ' + error.message);
+            }
+        }
+
+        // View runs for a job
+        async function viewRuns(instanceUrl, jobId, jobName) {
+            document.getElementById('runsModalTitle').textContent = `Runs: ${jobName}`;
+            document.getElementById('runsContent').innerHTML = '<div class="loading-state">Loading runs...</div>';
+            document.getElementById('runsModal').style.display = 'block';
+
+            try {
+                const response = await fetch('/proxy/runs', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        instance_url: instanceUrl,
+                        job_id: jobId
+                    })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    document.getElementById('runsContent').innerHTML =
+                        `<div class="error-state"><h3>Failed to load runs</h3><p>${error.error || 'Unknown error'}</p></div>`;
+                    return;
+                }
+
+                const data = await response.json();
+                const runs = data.runs;
+
+                if (runs.length === 0) {
+                    document.getElementById('runsContent').innerHTML =
+                        '<div class="empty-state"><h3>No runs yet</h3><p>This job hasn\'t been executed yet</p></div>';
+                    return;
+                }
+
+                // Build runs table
+                let html = '<table><thead><tr>';
+                html += '<th style="width: 60px;">Run ID</th>';
+                html += '<th>Started</th>';
+                html += '<th>Finished</th>';
+                html += '<th style="width: 100px;">Duration</th>';
+                html += '<th style="width: 100px;">Result</th>';
+                html += '<th style="width: 120px;">Actions</th>';
+                html += '</tr></thead><tbody>';
+
+                runs.forEach(run => {
+                    html += '<tr>';
+                    html += `<td>${run.id}</td>`;
+                    html += '<td>';
+                    if (run.start_at) {
+                        html += `<span class="utc-time-dynamic" data-utc="${run.start_at}">${run.start_at}</span>`;
+                    } else {
+                        html += '-';
+                    }
+                    html += '</td>';
+                    html += '<td>';
+                    if (run.finish_at) {
+                        html += `<span class="utc-time-dynamic" data-utc="${run.finish_at}">${run.finish_at}</span>`;
+                    } else {
+                        html += 'Running';
+                    }
+                    html += '</td>';
+                    html += `<td><code>${run.duration_formatted || '-'}</code></td>`;
+                    html += '<td>';
+                    if (run.result === 'success') {
+                        html += '<span class="result-success">Success</span>';
+                    } else if (run.result === 'fail') {
+                        html += '<span class="result-fail">Failed</span>';
+                    } else {
+                        html += '<span>Running</span>';
+                    }
+                    html += '</td>';
+                    html += `<td><button class="btn btn-primary btn-sm" onclick="viewLogs('${instanceUrl}', ${run.id}, '${jobName}')">View Logs</button></td>`;
+                    html += '</tr>';
+                });
+
+                html += '</tbody></table>';
+                document.getElementById('runsContent').innerHTML = html;
+
+                // Convert timestamps
+                convertDynamicTimestamps();
+
+            } catch (error) {
+                document.getElementById('runsContent').innerHTML =
+                    `<div class="error-state"><h3>Failed to load runs</h3><p>${error.message}</p></div>`;
+            }
+        }
+
+        // View logs for a run
+        async function viewLogs(instanceUrl, runId, jobName) {
+            document.getElementById('logsModalTitle').textContent = `Logs: ${jobName} - Run #${runId}`;
+            document.getElementById('logsContent').innerHTML = '<div class="loading-state">Loading logs...</div>';
+            document.getElementById('logsModal').style.display = 'block';
+
+            try {
+                const response = await fetch('/proxy/logs', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        instance_url: instanceUrl,
+                        run_id: runId
+                    })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    document.getElementById('logsContent').innerHTML =
+                        `<div class="error-state"><h3>Failed to load logs</h3><p>${error.error || 'Unknown error'}</p></div>`;
+                    return;
+                }
+
+                const data = await response.json();
+                const logs = data.logs;
+                const run = data.run;
+
+                // Build run info
+                let html = '<div style="background: #ecf0f1; padding: 15px; border-radius: 4px; margin-bottom: 20px;">';
+                html += '<h3 style="margin-bottom: 10px;">Run Information</h3>';
+                html += '<p style="font-size: 14px; color: #555; margin-bottom: 5px;"><strong>Started:</strong> ';
+                if (run.start_at) {
+                    html += `<span class="utc-time-dynamic" data-utc="${run.start_at}">${run.start_at}</span>`;
+                } else {
+                    html += '-';
+                }
+                html += '</p>';
+                html += '<p style="font-size: 14px; color: #555; margin-bottom: 5px;"><strong>Finished:</strong> ';
+                if (run.finish_at) {
+                    html += `<span class="utc-time-dynamic" data-utc="${run.finish_at}">${run.finish_at}</span>`;
+                } else {
+                    html += 'Running';
+                }
+                html += '</p>';
+                html += '<p style="font-size: 14px; color: #555;"><strong>Result:</strong> ';
+                if (run.result === 'success') {
+                    html += '<span class="result-success">Success</span>';
+                } else if (run.result === 'fail') {
+                    html += '<span class="result-fail">Failed</span>';
+                } else {
+                    html += '<span>Running</span>';
+                }
+                html += '</p></div>';
+
+                html += '<h3 style="margin-bottom: 10px;">Output</h3>';
+
+                if (logs.length === 0) {
+                    html += '<div class="empty-state"><h3>No output</h3><p>This job run didn\'t produce any output</p></div>';
+                } else {
+                    html += '<div class="log-container">';
+                    logs.forEach(log => {
+                        html += '<div class="log-line">';
+                        if (log.timestamp) {
+                            html += `<span class="log-timestamp utc-time-short" data-utc="${log.timestamp}">${log.timestamp}</span>`;
+                        }
+                        html += escapeHtml(log.log_line);
+                        html += '</div>';
+                    });
+                    html += '</div>';
+                }
+
+                document.getElementById('logsContent').innerHTML = html;
+
+                // Convert timestamps
+                convertDynamicTimestamps();
+                convertShortTimestamps();
+
+            } catch (error) {
+                document.getElementById('logsContent').innerHTML =
+                    `<div class="error-state"><h3>Failed to load logs</h3><p>${error.message}</p></div>`;
+            }
+        }
+
+        // Helper function to escape HTML
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Convert dynamically loaded timestamps
+        function convertDynamicTimestamps() {
+            const timeElements = document.querySelectorAll('.utc-time-dynamic');
+            timeElements.forEach(function(el) {
+                const utcTime = el.getAttribute('data-utc');
+                if (utcTime) {
+                    el.textContent = formatLocalTime(utcTime);
+                }
+            });
+        }
+
+        // Convert short timestamps for logs
+        function convertShortTimestamps() {
+            const timeElements = document.querySelectorAll('.utc-time-short');
+            timeElements.forEach(function(el) {
+                const utcTime = el.getAttribute('data-utc');
+                if (utcTime) {
+                    el.textContent = formatLocalTimeShort(utcTime);
+                }
+            });
+        }
+
+        // Format short timestamp for logs
+        function formatLocalTimeShort(utcTimestamp) {
+            if (!utcTimestamp) return '';
+
+            const utcStr = utcTimestamp.endsWith('Z') ? utcTimestamp : utcTimestamp + 'Z';
+            const date = new Date(utcStr);
+
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            const seconds = String(date.getSeconds()).padStart(2, '0');
+            const ms = String(date.getMilliseconds()).padStart(3, '0');
+
+            return `${hours}:${minutes}:${seconds}.${ms}`;
+        }
+
+        // Close runs modal
+        function closeRunsModal() {
+            document.getElementById('runsModal').style.display = 'none';
+        }
+
+        // Close logs modal
+        function closeLogsModal() {
+            document.getElementById('logsModal').style.display = 'none';
+        }
+
+        // Update window click handler to close all modals
+        window.onclick = function(event) {
+            const jobModal = document.getElementById('jobModal');
+            const runsModal = document.getElementById('runsModal');
+            const logsModal = document.getElementById('logsModal');
+
+            if (event.target === jobModal) {
+                closeJobModal();
+            } else if (event.target === runsModal) {
+                closeRunsModal();
+            } else if (event.target === logsModal) {
+                closeLogsModal();
             }
         }
     </script>
