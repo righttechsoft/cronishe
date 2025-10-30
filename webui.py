@@ -103,14 +103,26 @@ def index():
 
         # Get last run duration for each job
         for job in jobs:
+            # First check if there's a currently running job
             cursor.execute("""
-                SELECT duration FROM job_runs
-                WHERE job_id = ?
-                ORDER BY start_at DESC
+                SELECT id FROM job_runs
+                WHERE job_id = ? AND start_at IS NOT NULL AND finish_at IS NULL
                 LIMIT 1
             """, (job['id'],))
-            last_run = cursor.fetchone()
-            job['last_duration'] = format_duration(last_run['duration']) if last_run and last_run['duration'] is not None else '-'
+            running_job = cursor.fetchone()
+
+            if running_job:
+                job['last_duration'] = 'Running'
+            else:
+                # Get the last completed run's duration
+                cursor.execute("""
+                    SELECT duration FROM job_runs
+                    WHERE job_id = ?
+                    ORDER BY start_at DESC
+                    LIMIT 1
+                """, (job['id'],))
+                last_run = cursor.fetchone()
+                job['last_duration'] = format_duration(last_run['duration']) if last_run and last_run['duration'] is not None else '-'
 
     # Enhance job data with formatted schedule
     for job in jobs:
@@ -289,7 +301,11 @@ def job_runs(job_id):
         for run in runs:
             run['start_at_utc'] = run['start_at']
             run['finish_at_utc'] = run['finish_at']
-            run['duration_formatted'] = format_duration(run['duration'])
+            # Check if run is still running (has start_at but no finish_at)
+            if run['start_at'] and not run['finish_at']:
+                run['duration_formatted'] = 'Running'
+            else:
+                run['duration_formatted'] = format_duration(run['duration'])
 
     return template('job_runs', job=job, runs=runs)
 
@@ -397,7 +413,11 @@ def api_job_runs(job_id):
 
         # Format duration
         for run in runs:
-            run['duration_formatted'] = format_duration(run['duration'])
+            # Check if run is still running (has start_at but no finish_at)
+            if run['start_at'] and not run['finish_at']:
+                run['duration_formatted'] = 'Running'
+            else:
+                run['duration_formatted'] = format_duration(run['duration'])
 
     return json.dumps({'job': job, 'runs': runs})
 
