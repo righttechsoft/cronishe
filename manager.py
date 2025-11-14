@@ -241,6 +241,34 @@ def proxy_logs():
         return json.dumps({'error': str(e)})
 
 
+@app.route('/proxy/run', method='POST')
+def proxy_run_now():
+    """Proxy run now request to target instance"""
+    response.content_type = 'application/json'
+
+    try:
+        data = request.json
+        if not data or 'instance_url' not in data or 'job_id' not in data:
+            response.status = 400
+            return json.dumps({'error': 'Missing instance_url or job_id'})
+
+        instance_url = data['instance_url']
+        job_id = data['job_id']
+
+        # Forward run request to instance
+        resp = requests.post(f"{instance_url}/api/job/{job_id}/run", timeout=10)
+        resp.raise_for_status()
+
+        return resp.text
+
+    except requests.RequestException as e:
+        response.status = 500
+        return json.dumps({'error': f'Failed to run job: {str(e)}'})
+    except Exception as e:
+        response.status = 500
+        return json.dumps({'error': str(e)})
+
+
 @app.route('/static/<filename>')
 def server_static(filename):
     """Serve static files"""

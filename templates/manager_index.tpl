@@ -453,8 +453,7 @@
                 <table>
                     <thead>
                         <tr>
-                            <th style="width: 50px;">ID</th>
-                            <th>Name</th>
+                            <th style="width: 200px;">Name</th>
                             <th>Path</th>
                             <th>Schedule</th>
                             <th>Timezone</th>
@@ -467,8 +466,7 @@
                     <tbody>
                         % for job in instance['jobs']:
                         <tr id="job-{{instance['url']}}-{{job['id']}}">
-                            <td>{{job['id']}}</td>
-                            <td><strong>{{job['name']}}</strong></td>
+                            <td style="word-wrap: break-word; white-space: normal;"><strong>{{job['name']}}</strong></td>
                             <td><code style="background: #ecf0f1; color: #2c3e50;">{{job['path']}}</code></td>
                             <td>{{job['schedule_text']}}</td>
                             <td>{{job.get('timezone') or 'UTC'}}</td>
@@ -497,6 +495,7 @@
                             </td>
                             <td>
                                 <div class="actions">
+                                    <button class="btn btn-success" onclick="runJobNow('{{instance['url']}}', {{job['id']}}, '{{job['name']}}')">Run Now</button>
                                     <button class="btn btn-primary" onclick="viewRuns('{{instance['url']}}', {{job['id']}}, '{{job['name']}}')">Runs</button>
                                     <button class="btn btn-edit" onclick='showEditJobModal({{!repr(job)}}, "{{instance['url']}}")'>Edit</button>
                                     <button class="btn btn-toggle" onclick="toggleJob('{{instance['url']}}', {{job['id']}})">
@@ -743,6 +742,39 @@
                 location.reload();
             } catch (error) {
                 alert('Failed to delete job: ' + error.message);
+            }
+        }
+
+        // Run job now
+        async function runJobNow(instanceUrl, jobId, jobName) {
+            if (!confirm(`Run job "${jobName}" now?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/proxy/run', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        instance_url: instanceUrl,
+                        job_id: jobId
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    alert('Failed to run job: ' + (data.error || 'Unknown error'));
+                    return;
+                }
+
+                alert('Job started successfully!');
+                // Reload page to show updated state
+                setTimeout(() => location.reload(), 1000);
+            } catch (error) {
+                alert('Failed to run job: ' + error.message);
             }
         }
 

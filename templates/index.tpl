@@ -226,8 +226,7 @@
                 <table>
                     <thead>
                         <tr>
-                            <th style="width: 50px;">ID</th>
-                            <th>Name</th>
+                            <th style="width: 200px;">Name</th>
                             <th>Path</th>
                             <th>Schedule</th>
                             <th>Timezone</th>
@@ -241,8 +240,7 @@
                     <tbody>
                         % for job in jobs:
                         <tr>
-                            <td>{{job['id']}}</td>
-                            <td><strong>{{job['name']}}</strong></td>
+                            <td style="word-wrap: break-word; white-space: normal;"><strong>{{job['name']}}</strong></td>
                             <td><code>{{job['path']}}</code></td>
                             <td>{{job['schedule_text']}}</td>
                             <td>{{job.get('timezone') or 'UTC'}}</td>
@@ -274,6 +272,7 @@
                             </td>
                             <td>
                                 <div class="actions">
+                                    <button class="btn btn-success btn-sm" onclick="runJobNow({{job['id']}}, '{{job['name']}}')">Run Now</button>
                                     <a href="/job/{{job['id']}}/runs" class="btn btn-secondary btn-sm">Runs</a>
                                     <a href="/job/{{job['id']}}/edit" class="btn btn-primary btn-sm">Edit</a>
                                     % if job['active']:
@@ -328,6 +327,35 @@
                 }
             });
         });
+
+        // Run job now
+        async function runJobNow(jobId, jobName) {
+            if (!confirm(`Run job "${jobName}" now?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/job/${jobId}/run`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    alert('Failed to run job: ' + (data.error || 'Unknown error'));
+                    return;
+                }
+
+                alert('Job started successfully!');
+                // Reload page to show updated state
+                setTimeout(() => location.reload(), 1000);
+            } catch (error) {
+                alert('Failed to run job: ' + error.message);
+            }
+        }
     </script>
 </body>
 </html>

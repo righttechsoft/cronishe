@@ -624,6 +624,46 @@ def api_delete_job(job_id):
         return json.dumps({'error': str(e)})
 
 
+@app.route('/api/job/<job_id:int>/run', method='POST')
+def api_run_job_now(job_id):
+    """Run a job immediately via API"""
+    response.content_type = 'application/json'
+
+    try:
+        # Import here to avoid circular dependency
+        from scheduler import execute_job
+        from database import is_job_running
+        import threading
+
+        # Get job from database
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM jobs WHERE id = ?", (job_id,))
+            job = cursor.fetchone()
+
+            if not job:
+                response.status = 404
+                return json.dumps({'error': 'Job not found'})
+
+            job_dict = dict(job)
+
+        # Check if job is already running
+        if is_job_running(job_id):
+            response.status = 409
+            return json.dumps({'error': 'Job is already running'})
+
+        # Execute job in a separate thread
+        thread = threading.Thread(target=execute_job, args=(job_dict,))
+        thread.daemon = True
+        thread.start()
+
+        return json.dumps({'success': True, 'message': 'Job started'})
+
+    except Exception as e:
+        response.status = 500
+        return json.dumps({'error': str(e)})
+
+
 if __name__ == '__main__':
     # Initialize database
     init_database()
