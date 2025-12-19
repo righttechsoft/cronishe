@@ -300,6 +300,12 @@
                     <input type="text" id="on_fail" name="on_fail" value="{{job.get('on_fail') or ''}}" placeholder="https://example.com/webhook/fail">
                 </div>
 
+                <div class="form-group">
+                    <label for="retry_count">Retry Count</label>
+                    <input type="number" id="retry_count" name="retry_count" min="0" max="10" value="{{job.get('retry_count') or 3}}">
+                    <div class="help-text">Number of times to retry the job if it fails (0 to disable retries)</div>
+                </div>
+
                 <div class="form-actions">
                     <button type="submit" class="btn btn-primary">Update Job</button>
                     <a href="/" class="btn btn-secondary">Cancel</a>

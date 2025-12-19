@@ -15,7 +15,11 @@ from database import (
     finish_job_run,
     update_job_last_run,
     add_log_line,
-    is_job_running
+    is_job_running,
+    schedule_retry,
+    get_pending_retries,
+    remove_retry,
+    clear_retries_for_job
 )
 
 # Configure logging
@@ -27,6 +31,45 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+
+def calculate_retry_delay(job: Dict, attempt_number: int) -> int:
+    """
+    Calculate smart retry delay in minutes to avoid clashing with regular scheduled runs.
+
+    Args:
+        job: Job dictionary with schedule information
+        attempt_number: Current retry attempt (1, 2, 3, etc.)
+
+    Returns:
+        Delay in minutes before the retry should run
+    """
+    frequency_type = job['frequency_type']
+
+    if frequency_type == 'every':
+        # For 'every X minutes' jobs, use intervals smaller than X to avoid collision
+        every_min = job.get('frequency_every_min', 60)
+
+        if every_min <= 2:
+            # Very frequent jobs (1-2 min): retry at 15s, 30s, 45s intervals (convert to fraction of minutes)
+            # But we work in minutes, so use 1 min for all attempts to avoid complexity
+            return 1
+        elif every_min <= 5:
+            # Frequent jobs (3-5 min): use 1, 2, 3 minutes
+            delays = [1, 2, 3]
+        else:
+            # Less frequent jobs: use exponential backoff capped at half the interval
+            # This ensures retries complete before next scheduled run
+            max_delay = every_min // 2
+            delays = [min(1 * (2 ** (i)), max_delay) for i in range(3)]
+
+        # Return the delay for this attempt (attempt_number is 1-indexed)
+        return delays[min(attempt_number - 1, len(delays) - 1)]
+
+    else:  # 'at' type
+        # For 'at' jobs, use standard exponential backoff: 1, 2, 4 minutes
+        delays = [1, 2, 4]
+        return delays[min(attempt_number - 1, len(delays) - 1)]
 
 
 def call_webhook(url: Optional[str], job_name: str, context: str):
@@ -54,19 +97,32 @@ def call_webhook(url: Optional[str], job_name: str, context: str):
                 logger.error(f"Webhook {context} for job '{job_name}' failed after {max_attempts} attempts: {e}")
 
 
-def execute_job(job: Dict):
-    """Execute a job as a subprocess with output capture"""
+def execute_job(job: Dict, is_retry: bool = False, retry_attempt: int = 0):
+    """
+    Execute a job as a subprocess with output capture.
+
+    Args:
+        job: Job dictionary with all job details
+        is_retry: Whether this is a retry attempt (default: False)
+        retry_attempt: The retry attempt number if is_retry=True (0 for regular run)
+    """
     job_id = job['id']
     job_name = job['name']
     job_path = job['path']
+    retry_count = job.get('retry_count', 3)
 
-    logger.info(f"Starting job '{job_name}' (ID: {job_id})")
+    retry_suffix = f" (retry {retry_attempt}/{retry_count})" if is_retry else ""
+    logger.info(f"Starting job '{job_name}' (ID: {job_id}){retry_suffix}")
 
     # Track start time for duration calculation
     start_time = datetime.now(timezone.utc)
 
     # Create job run record
     run_id = create_job_run(job_id)
+
+    # Add log line indicating if this is a retry
+    if is_retry:
+        add_log_line(run_id, f"RETRY ATTEMPT {retry_attempt}/{retry_count}")
 
     # Call on_start webhook
     call_webhook(job['on_start'], job_name, 'on_start')
@@ -105,11 +161,34 @@ def execute_job(job: Dict):
 
         logger.info(f"Job '{job_name}' finished with result: {result} (exit code: {process.returncode}, duration: {duration}s)")
 
-        # Call appropriate webhook
+        # Handle retries based on result
         if result == 'success':
+            # Clear any pending retries for this job since it succeeded
+            clear_retries_for_job(job_id)
             call_webhook(job['on_success'], job_name, 'on_success')
         else:
+            # Job failed
             call_webhook(job['on_fail'], job_name, 'on_fail')
+
+            # Schedule retries if this was the initial run and retry_count > 0
+            if not is_retry and retry_count > 0:
+                # Clear any existing retries for this job first
+                clear_retries_for_job(job_id)
+
+                # Schedule retries
+                for attempt in range(1, retry_count + 1):
+                    delay_minutes = calculate_retry_delay(job, attempt)
+                    retry_time = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(minutes=delay_minutes)
+                    schedule_retry(job_id, run_id, attempt, retry_time)
+                    logger.info(f"Scheduled retry {attempt}/{retry_count} for job '{job_name}' in {delay_minutes} minute(s) at {retry_time}")
+
+            elif is_retry and retry_attempt < retry_count:
+                # This was a retry that failed, but there are more retries left
+                # The remaining retries are already scheduled in the queue, so just log
+                logger.info(f"Job '{job_name}' retry {retry_attempt}/{retry_count} failed, {retry_count - retry_attempt} retry(s) remaining")
+            elif is_retry and retry_attempt >= retry_count:
+                # This was the last retry and it failed
+                logger.error(f"Job '{job_name}' failed after {retry_count} retry attempts")
 
     except Exception as e:
         # Calculate duration even for failed jobs
@@ -121,6 +200,15 @@ def execute_job(job: Dict):
         finish_job_run(run_id, 'fail', duration)
         update_job_last_run(job_id, 'fail')
         call_webhook(job['on_fail'], job_name, 'on_fail')
+
+        # Same retry logic as above for exception case
+        if not is_retry and job.get('retry_count', 3) > 0:
+            clear_retries_for_job(job_id)
+            for attempt in range(1, retry_count + 1):
+                delay_minutes = calculate_retry_delay(job, attempt)
+                retry_time = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(minutes=delay_minutes)
+                schedule_retry(job_id, run_id, attempt, retry_time)
+                logger.info(f"Scheduled retry {attempt}/{retry_count} for job '{job_name}' in {delay_minutes} minute(s) at {retry_time}")
 
 
 def should_run_job(job: Dict, current_time: datetime) -> bool:
@@ -308,6 +396,53 @@ def scheduler_loop():
 
             if sleep_seconds > 0:
                 time.sleep(sleep_seconds)
+
+            # Get current time as naive UTC for retry checking
+            current_utc = datetime.now(timezone.utc).replace(tzinfo=None)
+
+            # Check for pending retries
+            pending_retries = get_pending_retries(current_utc)
+            if pending_retries:
+                logger.info(f"Found {len(pending_retries)} pending retry(s)")
+
+                for retry in pending_retries:
+                    retry_id = retry['id']
+                    job_id = retry['job_id']
+                    attempt_number = retry['attempt_number']
+
+                    # Get the job details
+                    with get_db() as conn:
+                        cursor = conn.cursor()
+                        cursor.execute("SELECT * FROM jobs WHERE id = ?", (job_id,))
+                        job_row = cursor.fetchone()
+
+                        if job_row:
+                            job = dict(job_row)
+
+                            # Check if job is already running before starting retry
+                            if is_job_running(job_id):
+                                logger.info(f"Job '{job['name']}' (ID: {job_id}) is already running, skipping retry {attempt_number}")
+                                # Don't remove from queue yet - will retry next minute
+                                continue
+
+                            # Check if job is still active
+                            if not job['active']:
+                                logger.info(f"Job '{job['name']}' (ID: {job_id}) is inactive, canceling retry {attempt_number}")
+                                remove_retry(retry_id)
+                                continue
+
+                            # Execute the retry in a separate thread
+                            logger.info(f"Executing retry {attempt_number} for job '{job['name']}' (ID: {job_id})")
+                            thread = threading.Thread(target=execute_job, args=(job, True, attempt_number))
+                            thread.daemon = True
+                            thread.start()
+
+                            # Remove the retry from the queue
+                            remove_retry(retry_id)
+                        else:
+                            # Job no longer exists, remove retry from queue
+                            logger.warning(f"Job ID {job_id} not found, removing retry from queue")
+                            remove_retry(retry_id)
 
             # Get jobs that should run
             jobs = get_jobs_to_run()

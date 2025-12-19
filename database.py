@@ -45,6 +45,7 @@ def init_database():
                 last_run TIMESTAMP,
                 last_run_result TEXT CHECK(last_run_result IN ('success', 'fail', NULL)),
                 active INTEGER NOT NULL DEFAULT 1,
+                retry_count INTEGER NOT NULL DEFAULT 3,
                 on_start TEXT,
                 on_success TEXT,
                 on_fail TEXT
@@ -75,10 +76,31 @@ def init_database():
             )
         """)
 
+        # Create retry_queue table to track pending retries
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS retry_queue (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                job_id INTEGER NOT NULL,
+                run_id INTEGER NOT NULL,
+                attempt_number INTEGER NOT NULL,
+                retry_at TIMESTAMP NOT NULL,
+                FOREIGN KEY (job_id) REFERENCES jobs(id),
+                FOREIGN KEY (run_id) REFERENCES job_runs(id)
+            )
+        """)
+
         # Create indexes for better performance
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_job_runs_job_id ON job_runs(job_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_run_logs_run_id ON run_logs(run_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_jobs_active ON jobs(active)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_retry_queue_retry_at ON retry_queue(retry_at)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_retry_queue_job_id ON retry_queue(job_id)")
+
+        # Add retry_count column if it doesn't exist (migration for existing databases)
+        cursor.execute("PRAGMA table_info(jobs)")
+        columns = [row[1] for row in cursor.fetchall()]
+        if 'retry_count' not in columns:
+            cursor.execute("ALTER TABLE jobs ADD COLUMN retry_count INTEGER NOT NULL DEFAULT 3")
 
         conn.commit()
 
@@ -138,3 +160,43 @@ def is_job_running(job_id: int) -> bool:
         )
         count = cursor.fetchone()[0]
         return count > 0
+
+
+
+
+def schedule_retry(job_id: int, run_id: int, attempt_number: int, retry_at: datetime):
+    """Schedule a retry for a failed job"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO retry_queue (job_id, run_id, attempt_number, retry_at) VALUES (?, ?, ?, ?)",
+            (job_id, run_id, attempt_number, retry_at)
+        )
+        conn.commit()
+
+
+def get_pending_retries(current_time: datetime):
+    """Get all retries that are due to run"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM retry_queue WHERE retry_at <= ?",
+            (current_time,)
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def remove_retry(retry_id: int):
+    """Remove a retry from the queue"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM retry_queue WHERE id = ?", (retry_id,))
+        conn.commit()
+
+
+def clear_retries_for_job(job_id: int):
+    """Clear all pending retries for a job"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM retry_queue WHERE job_id = ?", (job_id,))
+        conn.commit()

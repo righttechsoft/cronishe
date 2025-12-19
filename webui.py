@@ -153,6 +153,7 @@ def add_job_submit():
     on_start = request.forms.get('on_start') or None
     on_success = request.forms.get('on_success') or None
     on_fail = request.forms.get('on_fail') or None
+    retry_count = int(request.forms.get('retry_count', 3))
 
     with get_db() as conn:
         cursor = conn.cursor()
@@ -160,9 +161,9 @@ def add_job_submit():
         if frequency_type == 'every':
             every_min = int(request.forms.get('frequency_every_min', 0))
             cursor.execute("""
-                INSERT INTO jobs (name, path, frequency_type, frequency_every_min, timezone, active, on_start, on_success, on_fail)
-                VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)
-            """, (name, path, 'every', every_min, timezone, on_start, on_success, on_fail))
+                INSERT INTO jobs (name, path, frequency_type, frequency_every_min, timezone, active, retry_count, on_start, on_success, on_fail)
+                VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
+            """, (name, path, 'every', every_min, timezone, retry_count, on_start, on_success, on_fail))
         else:  # 'at'
             mon = 1 if request.forms.get('day_mon') else 0
             tue = 1 if request.forms.get('day_tue') else 0
@@ -178,9 +179,9 @@ def add_job_submit():
                 INSERT INTO jobs (name, path, frequency_type,
                     frequency_at_mon, frequency_at_tue, frequency_at_wed, frequency_at_thu,
                     frequency_at_fri, frequency_at_sat, frequency_at_sun,
-                    frequency_at_hr, frequency_at_min, timezone, active, on_start, on_success, on_fail)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
-            """, (name, path, 'at', mon, tue, wed, thu, fri, sat, sun, hour, minute, timezone, on_start, on_success, on_fail))
+                    frequency_at_hr, frequency_at_min, timezone, active, retry_count, on_start, on_success, on_fail)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?)
+            """, (name, path, 'at', mon, tue, wed, thu, fri, sat, sun, hour, minute, timezone, retry_count, on_start, on_success, on_fail))
 
         conn.commit()
 
@@ -214,6 +215,7 @@ def edit_job_submit(job_id):
     on_start = request.forms.get('on_start') or None
     on_success = request.forms.get('on_success') or None
     on_fail = request.forms.get('on_fail') or None
+    retry_count = int(request.forms.get('retry_count', 3))
 
     with get_db() as conn:
         cursor = conn.cursor()
@@ -225,9 +227,9 @@ def edit_job_submit(job_id):
                     frequency_at_mon=NULL, frequency_at_tue=NULL, frequency_at_wed=NULL,
                     frequency_at_thu=NULL, frequency_at_fri=NULL, frequency_at_sat=NULL,
                     frequency_at_sun=NULL, frequency_at_hr=NULL, frequency_at_min=NULL,
-                    timezone=?, on_start=?, on_success=?, on_fail=?
+                    timezone=?, retry_count=?, on_start=?, on_success=?, on_fail=?
                 WHERE id=?
-            """, (name, path, 'every', every_min, timezone, on_start, on_success, on_fail, job_id))
+            """, (name, path, 'every', every_min, timezone, retry_count, on_start, on_success, on_fail, job_id))
         else:  # 'at'
             mon = 1 if request.forms.get('day_mon') else 0
             tue = 1 if request.forms.get('day_tue') else 0
@@ -244,9 +246,9 @@ def edit_job_submit(job_id):
                     frequency_every_min=NULL,
                     frequency_at_mon=?, frequency_at_tue=?, frequency_at_wed=?, frequency_at_thu=?,
                     frequency_at_fri=?, frequency_at_sat=?, frequency_at_sun=?,
-                    frequency_at_hr=?, frequency_at_min=?, timezone=?, on_start=?, on_success=?, on_fail=?
+                    frequency_at_hr=?, frequency_at_min=?, timezone=?, retry_count=?, on_start=?, on_success=?, on_fail=?
                 WHERE id=?
-            """, (name, path, 'at', mon, tue, wed, thu, fri, sat, sun, hour, minute, timezone, on_start, on_success, on_fail, job_id))
+            """, (name, path, 'at', mon, tue, wed, thu, fri, sat, sun, hour, minute, timezone, retry_count, on_start, on_success, on_fail, job_id))
 
         conn.commit()
 
