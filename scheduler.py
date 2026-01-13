@@ -19,7 +19,8 @@ from database import (
     schedule_retry,
     get_pending_retries,
     remove_retry,
-    clear_retries_for_job
+    clear_retries_for_job,
+    update_run_pid
 )
 
 # Configure logging
@@ -137,6 +138,10 @@ def execute_job(job: Dict, is_retry: bool = False, retry_attempt: int = 0):
             bufsize=1,
             shell=True
         )
+
+        # Save the PID to the database for stop functionality
+        update_run_pid(run_id, process.pid)
+        logger.info(f"Job '{job_name}' started with PID {process.pid}")
 
         # Capture output line by line
         for line in iter(process.stdout.readline, ''):

@@ -997,11 +997,18 @@
                         html += '<span class="result-success">Success</span>';
                     } else if (run.result === 'fail') {
                         html += '<span class="result-fail">Failed</span>';
+                    } else if (run.result === 'aborted') {
+                        html += '<span class="result-fail">Aborted</span>';
                     } else {
                         html += '<span>Running</span>';
                     }
                     html += '</td>';
-                    html += `<td><button class="btn btn-primary btn-sm" onclick="viewLogs('${instanceUrl}', ${run.id}, '${jobName}')">View Logs</button></td>`;
+                    html += '<td><div class="actions">';
+                    html += `<button class="btn btn-primary btn-sm" onclick="viewLogs('${instanceUrl}', ${run.id}, '${jobName}')">View Logs</button>`;
+                    if (!run.finish_at) {
+                        html += `<button class="btn btn-delete btn-sm" onclick="stopRun('${instanceUrl}', ${run.id})">Stop</button>`;
+                    }
+                    html += '</div></td>';
                     html += '</tr>';
                 });
 
@@ -1154,6 +1161,40 @@
         // Close logs modal
         function closeLogsModal() {
             document.getElementById('logsModal').style.display = 'none';
+        }
+
+        // Stop a running job
+        async function stopRun(instanceUrl, runId) {
+            if (!confirm('Are you sure you want to stop this job?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/proxy/stop', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        instance_url: instanceUrl,
+                        run_id: runId
+                    })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    alert('Failed to stop job: ' + (data.error || 'Unknown error'));
+                    return;
+                }
+
+                alert('Job stopped successfully');
+                // Refresh the runs modal
+                closeRunsModal();
+                location.reload();
+            } catch (error) {
+                alert('Failed to stop job: ' + error.message);
+            }
         }
 
         // Update window click handler to close all modals

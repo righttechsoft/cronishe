@@ -1,8 +1,9 @@
 import os
 import json
+import signal
 from bottle import Bottle, request, response, template, static_file, redirect, TEMPLATE_PATH
-from datetime import datetime
-from database import init_database, get_db
+from datetime import datetime, timezone
+from database import init_database, get_db, get_running_run, abort_run, add_log_line
 from zoneinfo import available_timezones
 
 app = Bottle()
@@ -660,6 +661,66 @@ def api_run_job_now(job_id):
         thread.start()
 
         return json.dumps({'success': True, 'message': 'Job started'})
+
+    except Exception as e:
+        response.status = 500
+        return json.dumps({'error': str(e)})
+
+
+@app.route('/api/run/<run_id:int>/stop', method='POST')
+def api_stop_run(run_id):
+    """Stop a running job by killing the process"""
+    response.content_type = 'application/json'
+
+    try:
+        # Get the running job run
+        run = get_running_run(run_id)
+        if not run:
+            response.status = 404
+            return json.dumps({'error': 'Run not found or not running'})
+
+        pid = run.get('pid')
+        if not pid:
+            response.status = 400
+            return json.dumps({'error': 'No PID available for this run'})
+
+        # Calculate duration
+        start_at = datetime.fromisoformat(run['start_at'])
+        duration = int((datetime.now(timezone.utc).replace(tzinfo=None) - start_at).total_seconds())
+
+        # Try to kill the process
+        try:
+            # On Windows, use taskkill to kill process tree
+            import platform
+            if platform.system() == 'Windows':
+                import subprocess
+                # Kill the process tree (including child processes)
+                subprocess.run(['taskkill', '/F', '/T', '/PID', str(pid)],
+                             capture_output=True, check=False)
+            else:
+                # On Unix, send SIGTERM to the process group
+                import os
+                try:
+                    os.killpg(os.getpgid(pid), signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+                except OSError:
+                    # Process might not have its own process group, kill just the process
+                    try:
+                        os.kill(pid, signal.SIGTERM)
+                    except ProcessLookupError:
+                        pass
+        except Exception as kill_error:
+            # Process might already be dead, continue anyway
+            pass
+
+        # Add log entry
+        add_log_line(run_id, "Job stopped by user")
+
+        # Mark run as aborted in database
+        abort_run(run_id, duration)
+
+        return json.dumps({'success': True, 'message': 'Job stopped'})
 
     except Exception as e:
         response.status = 500

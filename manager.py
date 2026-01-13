@@ -269,6 +269,34 @@ def proxy_run_now():
         return json.dumps({'error': str(e)})
 
 
+@app.route('/proxy/stop', method='POST')
+def proxy_stop():
+    """Proxy stop run request to target instance"""
+    response.content_type = 'application/json'
+
+    try:
+        data = request.json
+        if not data or 'instance_url' not in data or 'run_id' not in data:
+            response.status = 400
+            return json.dumps({'error': 'Missing instance_url or run_id'})
+
+        instance_url = data['instance_url']
+        run_id = data['run_id']
+
+        # Forward stop request to instance
+        resp = requests.post(f"{instance_url}/api/run/{run_id}/stop", timeout=10)
+        resp.raise_for_status()
+
+        return resp.text
+
+    except requests.RequestException as e:
+        response.status = 500
+        return json.dumps({'error': f'Failed to stop run: {str(e)}'})
+    except Exception as e:
+        response.status = 500
+        return json.dumps({'error': str(e)})
+
+
 @app.route('/static/<filename>')
 def server_static(filename):
     """Serve static files"""

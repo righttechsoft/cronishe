@@ -61,7 +61,8 @@ def init_database():
                 start_at TIMESTAMP,
                 finish_at TIMESTAMP,
                 duration INTEGER,
-                result TEXT CHECK(result IN ('success', 'fail', NULL)),
+                result TEXT CHECK(result IN ('success', 'fail', 'aborted', NULL)),
+                pid INTEGER,
                 FOREIGN KEY (job_id) REFERENCES jobs(id)
             )
         """)
@@ -101,6 +102,12 @@ def init_database():
         columns = [row[1] for row in cursor.fetchall()]
         if 'retry_count' not in columns:
             cursor.execute("ALTER TABLE jobs ADD COLUMN retry_count INTEGER NOT NULL DEFAULT 3")
+
+        # Add pid column to job_runs if it doesn't exist (migration for existing databases)
+        cursor.execute("PRAGMA table_info(job_runs)")
+        run_columns = [row[1] for row in cursor.fetchall()]
+        if 'pid' not in run_columns:
+            cursor.execute("ALTER TABLE job_runs ADD COLUMN pid INTEGER")
 
         conn.commit()
 
@@ -200,3 +207,49 @@ def clear_retries_for_job(job_id: int):
         cursor = conn.cursor()
         cursor.execute("DELETE FROM retry_queue WHERE job_id = ?", (job_id,))
         conn.commit()
+
+
+def update_run_pid(run_id: int, pid: int):
+    """Update the PID for a running job"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE job_runs SET pid = ? WHERE id = ?",
+            (pid, run_id)
+        )
+        conn.commit()
+
+
+def get_run_pid(run_id: int) -> Optional[int]:
+    """Get the PID for a running job"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT pid FROM job_runs WHERE id = ?",
+            (run_id,)
+        )
+        row = cursor.fetchone()
+        return row['pid'] if row else None
+
+
+def abort_run(run_id: int, duration: int):
+    """Mark a run as aborted"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE job_runs SET finish_at = ?, duration = ?, result = 'aborted', pid = NULL WHERE id = ?",
+            (datetime.now(timezone.utc).replace(tzinfo=None), duration, run_id)
+        )
+        conn.commit()
+
+
+def get_running_run(run_id: int) -> Optional[dict]:
+    """Get a running job run by ID (with start_at but no finish_at)"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM job_runs WHERE id = ? AND start_at IS NOT NULL AND finish_at IS NULL",
+            (run_id,)
+        )
+        row = cursor.fetchone()
+        return dict(row) if row else None

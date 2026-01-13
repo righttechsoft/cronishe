@@ -85,9 +85,23 @@
             background: #2980b9;
         }
 
+        .btn-danger {
+            background: #e74c3c;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #c0392b;
+        }
+
         .btn-sm {
             padding: 6px 12px;
             font-size: 12px;
+        }
+
+        .actions {
+            display: flex;
+            gap: 5px;
         }
 
         .content {
@@ -224,12 +238,19 @@
                                     <span class="result-success">Success</span>
                                 % elif run['result'] == 'fail':
                                     <span class="result-fail">Failed</span>
+                                % elif run['result'] == 'aborted':
+                                    <span class="result-fail">Aborted</span>
                                 % else:
                                     <span>Running</span>
                                 % end
                             </td>
                             <td>
-                                <a href="/run/{{run['id']}}/logs" class="btn btn-primary btn-sm">View Logs</a>
+                                <div class="actions">
+                                    <a href="/run/{{run['id']}}/logs" class="btn btn-primary btn-sm">View Logs</a>
+                                    % if not run.get('finish_at'):
+                                    <button class="btn btn-danger btn-sm" onclick="stopRun({{run['id']}})">Stop</button>
+                                    % end
+                                </div>
                             </td>
                         </tr>
                         % end
@@ -273,6 +294,34 @@
                 }
             });
         });
+
+        // Stop a running job
+        async function stopRun(runId) {
+            if (!confirm('Are you sure you want to stop this job?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/run/${runId}/stop`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    alert('Failed to stop job: ' + (data.error || 'Unknown error'));
+                    return;
+                }
+
+                alert('Job stopped successfully');
+                location.reload();
+            } catch (error) {
+                alert('Failed to stop job: ' + error.message);
+            }
+        }
     </script>
 </body>
 </html>
